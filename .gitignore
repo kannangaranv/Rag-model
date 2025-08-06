@@ -81,3 +81,12 @@ typings/
 
 # Local settings
 *.local
+
+# — FAISS index files (built via index.write_index)
+*.faiss
+*.index
+*.pkl
+
+# If you ever store raw arrays or binaries for FAISS:
+*.npy
+*.bin
