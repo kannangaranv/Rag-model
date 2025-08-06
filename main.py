@@ -6,8 +6,13 @@ vector_store = FAISS.load_local(
     allow_dangerous_deserialization=True
 )
 
-results = vector_store.similarity_search_with_score(
-    "Will it be hot tomorrow?", k=1, filter={"source": "news"}
-)
-for res, score in results:
-    print(f"* [SIM={score:3f}] {res.page_content} [{res.metadata}]")
+while True:
+    query = input("Enter your query (or 'exit' to quit): ")
+    embedding = embeddings.embed_query(query)
+    if query.lower() == 'exit':
+        break
+    results = vector_store.similarity_search_with_score_by_vector(
+        embedding, k=2
+    )
+    for res, score in results:
+        print(f"* [SIM={score:3f}] {res.page_content} [{res.metadata}]")

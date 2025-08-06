@@ -1,7 +1,5 @@
 from uuid import uuid4
-
 from langchain_core.documents import Document
-from config import vector_store
 
 document_1 = Document(
     page_content="I had chocolate chip pancakes and scrambled eggs for breakfast this morning.",
