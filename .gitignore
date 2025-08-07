@@ -90,3 +90,5 @@ typings/
 # If you ever store raw arrays or binaries for FAISS:
 *.npy
 *.bin
+
+.env

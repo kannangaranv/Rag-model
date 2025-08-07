@@ -3,3 +3,4 @@ langchain-huggingface
 sentence-transformers
 langchain-community
 faiss-cpu
+langchain-openai
