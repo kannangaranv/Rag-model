@@ -1,5 +1,10 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+import os
+from dotenv import load_dotenv
+load_dotenv()
+# Initialize the LLM with the OpenAI API key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 llm = ChatOpenAI(
     model="gpt-4o",
@@ -7,7 +12,7 @@ llm = ChatOpenAI(
     max_tokens=None,
     timeout=None,
     max_retries=2,
-    api_key="", 
+    api_key=OPENAI_API_KEY
 )
 
 messages = [
@@ -15,7 +20,10 @@ messages = [
     HumanMessage(content="I love programming."),
 ]
 
-response = llm.invoke(messages)
-
-
-print(response.content)
+while True:
+    user_input = input("Enter a sentence to translate (or 'exit' to quit): ")
+    if user_input.lower() == 'exit':
+        break
+    messages[1] = HumanMessage(content=user_input)
+    response = llm.invoke(messages)
+    print("Translation:", response.content)
