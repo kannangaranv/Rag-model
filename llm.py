@@ -15,15 +15,15 @@ llm = ChatOpenAI(
     api_key=OPENAI_API_KEY
 )
 
-messages = [
-    SystemMessage(content="You are a helpful assistant that translates English to French. Translate the user sentence."),
-    HumanMessage(content="I love programming."),
-]
+# messages = [
+#     SystemMessage(content="You are a helpful assistant that translates English to French. Translate the user sentence."),
+#     HumanMessage(content="I love programming."),
+# ]
 
-while True:
-    user_input = input("Enter a sentence to translate (or 'exit' to quit): ")
-    if user_input.lower() == 'exit':
-        break
-    messages[1] = HumanMessage(content=user_input)
-    response = llm.invoke(messages)
-    print("Translation:", response.content)
+# while True:
+#     user_input = input("Enter a sentence to translate (or 'exit' to quit): ")
+#     if user_input.lower() == 'exit':
+#         break
+#     messages[1] = HumanMessage(content=user_input)
+#     response = llm.invoke(messages)
+#     print("Translation:", response.content)
