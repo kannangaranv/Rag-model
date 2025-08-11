@@ -26,9 +26,15 @@ def create_documents_from_md_text(md_text):
     return documents, uuids
 
 def upload_documents_to_vector_store(documents, uuids):
-    vector_store.add_documents(documents=documents, ids=uuids)
-    vector_store.save_local("vector_store")
-    print("Documents uploaded to vector store successfully.")
+    global vector_db
+    if (VECTOR_DIR / "index.faiss").exists() and (VECTOR_DIR / "index.pkl").exists():
+        vector_db.add_documents(documents=documents, ids=uuids)
+        vector_db.save_local("vector_store")
+        print("Documents uploaded to vector store successfully.")
+    else:
+        vector_store.add_documents(documents=documents, ids=uuids)
+        vector_store.save_local("vector_store")
+        print("Documents uploaded to vector store successfully.")
 
 def get_similarity_context(query, k=3,):
     query_embedding = embeddings.embed_query(query)
