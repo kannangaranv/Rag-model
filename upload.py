@@ -23,3 +23,6 @@ from config import vector_store
 
 vector_store.add_documents(documents=documents, ids=uuids)
 vector_store.save_local("vector_store")
+
+
+
