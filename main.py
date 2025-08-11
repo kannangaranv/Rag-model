@@ -16,7 +16,7 @@ while True:
     query_embedding = embeddings.embed_query(query)
 
     results = vector_store.similarity_search_with_score_by_vector(
-        query_embedding, k=5
+        query_embedding, k=3
     )
 
     retrieved_docs = [doc.page_content for doc, _ in results]

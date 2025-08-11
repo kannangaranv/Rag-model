@@ -25,7 +25,7 @@
 #     connection_string=_CONNECTION_STRING,
 #     distance_strategy=DistanceStrategy.COSINE,
 #     embedding_function=embeddings,
-#     embedding_length=768,  # ← Correct for all-mpnet-base-v2
+#     embedding_length=768,  
 #     table_name="langchain_test_table"
 # )
 
