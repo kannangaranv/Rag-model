@@ -1,7 +1,7 @@
 from uuid import uuid4
 from langchain_core.documents import Document
+from config import md_text
 # from chunk import processed_chunks
-from pdf_convertor import md_text
 
 documents = []
 # for chunk in processed_chunks:
@@ -20,3 +20,5 @@ for chunk in md_text:
 
 uuids = [str(uuid4()) for _ in range(len(documents))]
 
+
+    
