@@ -1,18 +1,24 @@
-Using command prompt
-Create virtual environment
+# FastAPI Project Setup
 
+## 1. Create Virtual Environment (Command Prompt)
+```cmd
 python -m venv .venv
+```
+ ## 2. Activate Virtual Environment
 
-Activate virtual environment
-
+```bash
 .venv\Scripts\activate.bat
+```
 
-Install packages 
+## 3. Install packages 
+```bash
 pip install -r requirements.txt
+```
 
-Run the project
+## 4. Run the project
+```bash
 uvicorn app.main:app --reload --port 8000
-
+```
 
 
 
