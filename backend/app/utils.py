@@ -36,7 +36,7 @@ def upload_documents_to_vector_store(documents, uuids):
         vector_store.save_local("vector_store")
         print("Documents uploaded to vector store successfully.")
 
-def get_similarity_context(query, k=2,):
+def get_similarity_context(query, k=3,):
     query_embedding = embeddings.embed_query(query)
     results = vector_db.similarity_search_with_score_by_vector(query_embedding, k=k)
     retrieved_docs = [doc.page_content for doc, _ in results]
