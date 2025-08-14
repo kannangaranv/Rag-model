@@ -47,15 +47,33 @@ def get_llm_response(query, context):
     messages = [
         {
             "role": "system",
-            "content": "You are a helpful assistant. Use the context provided to answer the user's question accurately and clearly. The response should be in html format."
+            "content": """You are a helpful assistant for the BoardPAC application, powered by GPT-4o and Retrieval-Augmented Generation (RAG). 
+All relevant BoardPAC knowledge is stored in the knowledge base, and you should answer based only on the provided retrieved context.
+
+Internally follow these steps:
+1. Summarize the user question in simpler words.
+2. Identify which retrieved text chunks from the provided context are directly relevant to the question.
+3. Combine those chunks into a clear outline.
+4. Draft a single, coherent, complete answer using only the relevant chunks.
+
+Output Rules:
+- **Only** return the final refined answer.
+- **Always** format the answer as fully valid HTML — using headings (`<h2>`), paragraphs (`<p>`), ordered/unordered lists (`<ol>`/`<ul>`), list items (`<li>`), and bold (`<strong>`) where needed.
+- **Do not** return Markdown or plain text."""
         },
         {
             "role": "user",
-            "content": f"Context:\n{context}\n\nQuestion:\n{query}"
+            "content": f"""User Query:
+{query}
+
+Retrieved Context (Top Relevant Chunks):
+{context}"""
         }
     ]
     response = llm.invoke(messages)
     return response.content
+
+
 
 def load_vector_store() -> None:
     global vector_db
