@@ -4,7 +4,11 @@ from pathlib import Path
 from langchain_core.documents import Document
 from typing import Optional, List
 from langchain_community.vectorstores import FAISS
-from app.config import vector_store,llm,embeddings
+from app.config import (
+    vector_store,
+    llm,
+    embeddings
+)
 
 VECTOR_DIR = Path("vector_store")
 
@@ -72,8 +76,6 @@ Retrieved Context (Top Relevant Chunks):
     ]
     response = llm.invoke(messages)
     return response.content
-
-
 
 def load_vector_store() -> None:
     global vector_db

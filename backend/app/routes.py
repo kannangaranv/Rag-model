@@ -16,10 +16,7 @@ router = APIRouter()
 class QueryRequest(BaseModel):
     query: str
 
-@router.get("/hello")
-def read_hello():
-    return {"message": "Hello, World!"} 
-
+# api to upload documents to vector store
 @router.post("/upload-documents")
 async def upload_documents(file: UploadFile = File(...)):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
@@ -42,11 +39,14 @@ async def upload_documents(file: UploadFile = File(...)):
     finally:
         temp_path.unlink(missing_ok=True)
 
+# API to query documents and get responses from llm.
 @router.post("/query")
 async def query_documents(payload: QueryRequest):
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
-
-    context = get_similarity_context(payload.query)
-    response = get_llm_response(payload.query, context)
-    return {"response": response}
+    try:
+        context = get_similarity_context(payload.query)
+        response = get_llm_response(payload.query, context)
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
