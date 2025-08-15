@@ -63,7 +63,7 @@ Internally follow these steps:
 Output Rules:
 - **Only** return the final refined answer.
 - **Always** format the answer as fully valid HTML — using headings (`<h2>`), paragraphs (`<p>`), ordered/unordered lists (`<ol>`/`<ul>`), list items (`<li>`), and bold (`<strong>`) where needed.
-- **Do not** return Markdown or plain text."""
+- **Do not** return Markdown or plain text or html as a string."""
         },
         {
             "role": "user",
