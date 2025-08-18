@@ -35,9 +35,11 @@ def upload_documents_to_vector_store(documents, uuids):
         vector_db.add_documents(documents=documents, ids=uuids)
         vector_db.save_local("vector_store")
         print("Documents uploaded to vector store successfully.")
+        load_vector_store()
     else:
         vector_store.add_documents(documents=documents, ids=uuids)
         vector_store.save_local("vector_store")
+        load_vector_store()
         print("Documents uploaded to vector store successfully.")
 
 def get_similarity_context(query, k=3,):
