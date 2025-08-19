@@ -1,6 +1,8 @@
+import json
 from fastapi import APIRouter, HTTPException, UploadFile, File
 import tempfile
 import shutil
+from uuid import uuid4
 from pathlib import Path
 from pydantic import BaseModel
 from app.utils import (
@@ -10,6 +12,8 @@ from app.utils import (
     get_similarity_context,
     get_llm_response
 )
+from sqlalchemy import text
+from app.config import SessionLocal
 
 router = APIRouter()
 
@@ -21,7 +25,8 @@ class QueryRequest(BaseModel):
 async def upload_documents(file: UploadFile = File(...)):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-    
+
+    temp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             temp_path = Path(tmp.name)
@@ -31,13 +36,43 @@ async def upload_documents(file: UploadFile = File(...)):
 
     try:
         md_text = convert_pdf_to_markdown(temp_path)
+        pdf_bytes = temp_path.read_bytes()
+        file_size = temp_path.stat().st_size
+        doc_id = str(uuid4()) 
+        with SessionLocal() as db:
+            db.execute(
+                text("""
+                    INSERT INTO dbo.Documents
+                        (Id, FileName, ContentType, FileSizeBytes, Content, MdText)
+                    VALUES
+                        (CONVERT(uniqueidentifier, :Id),
+                         :FileName, :ContentType, :FileSizeBytes, :Content, :MdText)
+                """),
+                {
+                    "Id": doc_id,
+                    "FileName": file.filename or "document.pdf",
+                    "ContentType": file.content_type,
+                    "FileSizeBytes": file_size,
+                    "Content": pdf_bytes,
+                    "MdText": "",
+                }
+            )
+            db.commit()
         documents, uuids = create_documents_from_md_text(md_text)
         upload_documents_to_vector_store(documents, uuids)
-        return {"message": "Documents uploaded successfully."}
+
+        return {
+            "message": "Document saved to SQL Server and uploaded to vector store.",
+            "document_id": doc_id
+        }
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error uploading document: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+
     finally:
-        temp_path.unlink(missing_ok=True)
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
 
 # API to query documents and get responses from llm.
 @router.post("/query")
