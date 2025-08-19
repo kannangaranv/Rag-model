@@ -1,0 +1,38 @@
+<div class="app-shell" [class.sidebar-collapsed]="collapsed">
+  <!-- Top Bar -->
+  <header class="topbar">
+    <!-- <button class="icon-btn me-2" (click)="toggleSidebar()" aria-label="Toggle sidebar">
+      <i class="bi bi-list"></i>
+    </button> -->
+
+    <div class="brand">
+      <span class="brand-name">POC of AI-Assistant</span>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <nav class="nav flex-column">
+      <a
+        class="nav-link"
+        routerLink="/chat"
+        routerLinkActive="active"
+      >
+        <i class="bi bi-chat-dots me-2"></i> AI Assistant
+      </a>
+
+      <a
+        class="nav-link"
+        routerLink="/knowledge-base"
+        routerLinkActive="active"
+      >
+        <i class="bi bi-collection me-2"></i> Knowledge Base
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Page Content -->
+  <main class="content-area">
+    <router-outlet></router-outlet>
+  </main>
+</div>

@@ -10,3 +10,5 @@ faiss-cpu
 langchain-openai
 pymupdf4llm
 python-multipart
+sqlalchemy
+pyodbc

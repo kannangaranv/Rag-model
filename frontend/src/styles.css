@@ -1,1 +1,20 @@
 /* You can add global styles to this file, and also import other style files */
+/* Global reset */
+html, body {
+  height: 100%;
+  margin: 0 !important;   /* kill the white rim */
+  padding: 0 !important;
+}
+
+/* Make your shell fill the viewport */
+app-root, .app-shell {
+  min-height: 100vh;
+}
+
+/* Optional: match your background so edges look seamless */
+body {
+  background: #1f2937; /* or whatever your app background is */
+}
+
+/* Helpful reset */
+* { box-sizing: border-box; }
