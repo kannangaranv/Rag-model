@@ -1,10 +1,8 @@
 <div class="chat-wrapper">
-  <!-- Header -->
   <header class="chat-header">
     <div class="title">AI-Assistant</div>
   </header>
 
-  <!-- Messages -->
   <section #msgPane class="messages" role="log" aria-live="polite">
     <div
       *ngFor="let m of chatMessages"
@@ -26,13 +24,11 @@
       </div>
 
       <div class="bubble" [class.user]="m.role==='user'" [class.assistant]="m.role==='assistant'">
-        <!-- Assistant HTML allowed -->
         <div *ngIf="m.isHtml; else textTpl" [innerHTML]="m.content"></div>
         <ng-template #textTpl>{{ m.content }}</ng-template>
       </div>
     </div>
 
-    <!-- Typing indicator -->
     <div class="msg-row left" *ngIf="isLoading">
       <div class="avatar">
         <img src="assets/images/assistant.png"  class="avatar-img" />
@@ -45,7 +41,6 @@
     </div>
   </section>
 
-  <!-- Composer -->
   <footer class="composer">
     <textarea
       [(ngModel)]="userMessage"
@@ -64,6 +59,4 @@
     </button>
   </footer>
 
-  <!-- Add PDF uploader
-  <app-upload></app-upload> -->
 </div>

@@ -18,7 +18,8 @@
   cursor: pointer;
   transition: all .2s ease;
   outline: none;
-}
+} 
+
 .dropzone:hover,
 .dropzone.dragover {
   border-color: #5c7cfa;
@@ -130,4 +131,104 @@
   width: 50px;  
   height: 50px;
   object-fit: contain;
+}
+
+.docs-card {
+  margin-top: 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+  padding: 16px;
+}
+
+.docs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.docs-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.docs-controls input[type="text"] {
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  min-width: 220px;
+}
+
+.docs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.docs-table th,
+.docs-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f2f5;
+  vertical-align: middle;
+}
+
+.icon-cell {
+  text-align: center;
+}
+
+.row-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.truncate {
+  max-width: 420px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+.badge-ok {
+  color: #065f46;
+  background: #d1fae5;
+  border-color: #10b98133;
+}
+.badge-warn {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #f59e0b33;
+}
+
+.actions-cell .btn.btn-text {
+  padding: 0 6px;
+  color: #2563eb;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.actions-cell .btn.btn-text:hover {
+  text-decoration: underline;
+}
+
+.pager {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.loading-row,
+.empty {
+  padding: 14px;
+  color: #6b7280;
 }

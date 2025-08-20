@@ -1,16 +1,10 @@
 <div class="app-shell" [class.sidebar-collapsed]="collapsed">
-  <!-- Top Bar -->
   <header class="topbar">
-    <!-- <button class="icon-btn me-2" (click)="toggleSidebar()" aria-label="Toggle sidebar">
-      <i class="bi bi-list"></i>
-    </button> -->
-
     <div class="brand">
       <span class="brand-name">POC of AI-Assistant</span>
     </div>
   </header>
 
-  <!-- Sidebar -->
   <aside class="sidebar">
     <nav class="nav flex-column">
       <a
@@ -30,8 +24,6 @@
       </a>
     </nav>
   </aside>
-
-  <!-- Page Content -->
   <main class="content-area">
     <router-outlet></router-outlet>
   </main>

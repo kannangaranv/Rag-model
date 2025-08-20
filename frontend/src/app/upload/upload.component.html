@@ -1,5 +1,6 @@
 <div class="uploader-card">
   <h3 class="uploader-title">Update Knowledge Base</h3>
+
   <div
     class="dropzone"
     [class.dragover]="dragOver"
@@ -12,14 +13,15 @@
     aria-label="Upload PDF. Click or drag & drop."
   >
     <div class="dz-icon">
-  <img src="assets/images/pdf.png" alt="PDF Icon" />
-</div>
+      <img src="assets/images/pdf.png" alt="PDF Icon" />
+    </div>
 
     <div class="dz-text">
       <strong>Upload a PDF</strong>
       <span>Drag & drop your file here, or <u>browse</u></span>
       <small>Only .pdf • Max 50 MB</small>
     </div>
+
     <input
       #fileInput
       type="file"
@@ -29,7 +31,6 @@
     />
   </div>
 
-  <!-- Selected file info -->
   <div class="file-row" *ngIf="file">
     <div class="file-meta">
       <div class="file-name" [title]="file.name">{{ file.name }}</div>
@@ -38,7 +39,7 @@
     <button class="btn-link" (click)="clearFile()" [disabled]="uploading">Remove</button>
   </div>
 
-  <!-- Progress -->
+
   <div class="progress-wrap" *ngIf="uploading">
     <div class="progress-bar">
       <div class="progress-fill" [style.width.%]="progress"></div>
@@ -46,7 +47,7 @@
     <div class="progress-label">{{ progress }}%</div>
   </div>
 
-  <!-- Actions -->
+ 
   <div class="actions">
     <button class="btn btn-primary" (click)="upload()" [disabled]="!file || uploading">
       {{ uploading ? 'Uploading…' : 'Upload PDF' }}
@@ -54,4 +55,72 @@
     <span class="status success" *ngIf="!uploading && message && !error">{{ message }}</span>
     <span class="status error" *ngIf="!uploading && error">{{ error }}</span>
   </div>
+</div>
+
+
+<div class="docs-card">
+  <div class="docs-header">
+    <h4>Stored PDFs</h4>
+    <div class="docs-controls">
+      <input
+        type="text"
+        placeholder="Search filename…"
+        [(ngModel)]="q"
+        (keyup.enter)="onSearchEnter()"
+      />
+      <button class="btn btn-secondary" (click)="loadDocuments(1)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="docs-body" *ngIf="!docsLoading; else loadingTpl">
+    <div *ngIf="docs.length === 0" class="empty">No documents found.</div>
+
+    <table class="docs-table" *ngIf="docs.length > 0">
+      <thead>
+        <tr>
+          <th style="width: 36px;"></th>
+          <th>File name</th>
+          <th>Size</th>
+          <th>Uploaded</th>
+          <th>Vector Store</th>
+          <th style="width: 160px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let d of docs">
+          <td class="icon-cell">
+            <img src="assets/images/pdf.png" alt="PDF" class="row-icon" />
+          </td>
+          <td class="truncate" [title]="d.file_name">{{ d.file_name }}</td>
+          <td>{{ formatSize(d.file_size_bytes) }}</td>
+          <td>{{ d.uploaded_at | date:'medium' }}</td>
+          <td>
+            <span
+              class="badge"
+              [class.badge-ok]="isInVectorStore(d)"
+              [class.badge-warn]="!isInVectorStore(d)"
+            >
+              {{ isInVectorStore(d) ? 'In Vector Store' : 'Not Indexed' }}
+            </span>
+          </td>
+          <td class="actions-cell">
+            <button class="btn btn-text" (click)="view(d)">Preview</button>
+            <button class="btn btn-text" (click)="download(d)">Download</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+   
+    <div class="pager" *ngIf="total > pageSize">
+      <button class="btn btn-secondary" (click)="prevPage()" [disabled]="page === 1">Prev</button>
+      <span>Page {{ page }} / {{ totalPages }}</span>
+<button class="btn btn-secondary" (click)="nextPage()" [disabled]="page >= totalPages">Next</button>
+
+    </div>
+  </div>
+
+  <ng-template #loadingTpl>
+    <div class="loading-row">Loading documents…</div>
+  </ng-template>
 </div>

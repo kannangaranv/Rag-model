@@ -7,5 +7,4 @@ import { Component } from '@angular/core';
 })
 export class LayoutComponent {
   collapsed = false;
-  // toggleSidebar() { this.collapsed = !this.collapsed; }
 }
