@@ -23,7 +23,6 @@ export class ChatbotComponent {
   constructor(private openAiApiService: OpenAiApiService) {}
 
   private extractHtml(payload: string): string {
-    // Strip ```html ... ``` fences if present
     const m = payload?.match(/^```html\s*([\s\S]*?)\s*```$/i);
     return m ? m[1] : payload ?? '';
   }
@@ -37,9 +36,7 @@ export class ChatbotComponent {
 
   onEnter(e: Event) {
   const ke = e as KeyboardEvent;
-  // prevent newline on Enter
   ke.preventDefault();
-  // Only send on Enter without Shift (safety if template changes later)
   if (ke.key === 'Enter' && !ke.shiftKey) {
     this.sendMessage();
   }

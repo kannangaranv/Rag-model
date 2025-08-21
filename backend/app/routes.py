@@ -7,13 +7,20 @@ from pathlib import Path
 from pydantic import BaseModel
 from app.utils import (
     convert_pdf_to_markdown,
-    create_documents_from_md_text,
+    create_chunks_from_md_text,
+    create_documents_from_chunks,
     upload_documents_to_vector_store,
     get_similarity_context,
     get_llm_response
 )
 from sqlalchemy import text
 from app.config import SessionLocal
+from app.schemas import DocumentMeta, DocumentListResponse
+from fastapi import Query
+from uuid import UUID
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+from fastapi import Request, Response
 
 router = APIRouter()
 
@@ -58,7 +65,8 @@ async def upload_documents(file: UploadFile = File(...)):
                 }
             )
             db.commit()
-        documents, uuids = create_documents_from_md_text(md_text)
+        chunks = create_chunks_from_md_text(md_text)
+        documents, uuids = create_documents_from_chunks(chunks)
         upload_documents_to_vector_store(documents, uuids)
 
         return {
@@ -85,3 +93,124 @@ async def query_documents(payload: QueryRequest):
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/documents", response_model=DocumentListResponse)
+def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200)):
+    offset = (page - 1) * page_size
+    with SessionLocal() as db:
+        total = db.execute(text("SELECT COUNT(*) AS cnt FROM dbo.Documents")).scalar_one()
+
+        rows = db.execute(
+            text("""
+                SELECT
+                    Id,
+                    FileName,
+                    ContentType,
+                    FileSizeBytes,
+                    UploadedAt,
+                    CASE WHEN MdText IS NULL THEN 0 ELSE 1 END AS HasMd
+                FROM dbo.Documents
+                ORDER BY UploadedAt DESC
+                OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+            """),
+            {"offset": offset, "limit": page_size}
+        ).all()
+
+    items = [
+        DocumentMeta(
+            id=row.Id,
+            file_name=row.FileName,
+            content_type=row.ContentType,
+            file_size_bytes=row.FileSizeBytes,
+            uploaded_at=row.UploadedAt,
+            has_md_text=bool(row.HasMd),
+        )
+        for row in rows
+    ]
+
+    return DocumentListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/documents/{doc_id}/download")
+def download_document(doc_id: UUID):
+    with SessionLocal() as db:
+        row = db.execute(
+            text("""
+                SELECT FileName, ContentType, Content
+                FROM dbo.Documents
+                WHERE Id = CONVERT(uniqueidentifier, :id)
+            """),
+            {"id": str(doc_id)}
+        ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_like = BytesIO(row.Content)
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{row.FileName}"'
+    }
+    return StreamingResponse(
+        file_like,
+        media_type=row.ContentType or "application/pdf",
+        headers=headers
+    )
+
+@router.get("/documents/{doc_id}/view")
+def view_document(doc_id: UUID, request: Request):
+    with SessionLocal() as db:
+        row = db.execute(
+            text("""
+                SELECT FileName, ContentType, Content
+                FROM dbo.Documents
+                WHERE Id = CONVERT(uniqueidentifier, :id)
+            """),
+            {"id": str(doc_id)}
+        ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    content_type = row.ContentType or "application/pdf"
+    file_name = row.FileName or "document.pdf"
+    blob: bytes = row.Content
+    total = len(blob)
+
+    range_header = request.headers.get("range")
+    if range_header:
+        rng = _parse_range_header(range_header, total)
+        if rng:
+            start, end = rng
+            chunk = blob[start:end + 1]
+            headers = {
+                "Content-Range": f"bytes {start}-{end}/{total}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(len(chunk)),
+                "Content-Disposition": f'inline; filename="{file_name}"',
+            }
+            return Response(content=chunk, status_code=206, media_type=content_type, headers=headers)
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(total),
+        "Content-Disposition": f'inline; filename="{file_name}"',
+    }
+    return Response(content=blob, media_type=content_type, headers=headers)
+
+
+def _parse_range_header(range_header: str, file_size: int):
+    try:
+        units, _, rng = range_header.partition("=")
+        if units.strip().lower() != "bytes":
+            return None
+        start_s, _, end_s = rng.partition("-")
+        if start_s == "":
+            return None
+        start = int(start_s)
+        end = int(end_s) if end_s else file_size - 1
+        if start < 0 or end < start or end >= file_size:
+            return None
+        return start, end
+    except Exception:
+        return None

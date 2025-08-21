@@ -1,16 +1,14 @@
 <div class="app-shell" [class.sidebar-collapsed]="collapsed">
-  <!-- Top Bar -->
-  <header class="topbar">
-    <!-- <button class="icon-btn me-2" (click)="toggleSidebar()" aria-label="Toggle sidebar">
-      <i class="bi bi-list"></i>
-    </button> -->
+  <header class="topbar d-flex align-items-center px-3">
+  <div class="brand d-flex align-items-center">
+    <img src="assets/images/Logo.png" alt="BoardPAC Logo" class="logo me-2" />
 
-    <div class="brand">
-      <span class="brand-name">POC of AI-Assistant</span>
-    </div>
-  </header>
+    <span class="brand-name">POC of AI-Assistant</span>
 
-  <!-- Sidebar -->
+    
+  </div>
+</header>
+
   <aside class="sidebar">
     <nav class="nav flex-column">
       <a
@@ -30,8 +28,6 @@
       </a>
     </nav>
   </aside>
-
-  <!-- Page Content -->
   <main class="content-area">
     <router-outlet></router-outlet>
   </main>
