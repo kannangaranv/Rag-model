@@ -15,15 +15,23 @@ VECTOR_DIR = Path("vector_store")
 vector_db: Optional[FAISS] = None
 
 def convert_pdf_to_markdown(pdf_path):
-    md_text = pymupdf4llm.to_markdown(pdf_path, page_chunks=True)
+    md_text = pymupdf4llm.to_markdown(pdf_path)
     return md_text
 
-def create_documents_from_md_text(md_text):
+def create_chunks_from_md_text(text, chunk_size=500, overlap=50):
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_size - overlap):
+        chunk = ' '.join(words[i:i + chunk_size])
+        if len(chunk.strip()) > 50:
+            chunks.append(chunk)
+    return chunks
+
+def create_documents_from_chunks(chunks):
     documents = []
-    for chunk in md_text:
+    for chunk in chunks:
         document = Document(
-            page_content=chunk['text'],
-            metadata={"page": chunk['metadata']['page']}
+            page_content=chunk,
         )
         documents.append(document)
     uuids = [str(uuid4()) for _ in range(len(documents))]
@@ -42,7 +50,7 @@ def upload_documents_to_vector_store(documents, uuids):
         load_vector_store()
         print("Documents uploaded to vector store successfully.")
 
-def get_similarity_context(query, k=3,):
+def get_similarity_context(query, k=6,):
     query_embedding = embeddings.embed_query(query)
     results = vector_db.similarity_search_with_score_by_vector(query_embedding, k=k)
     retrieved_docs = [doc.page_content for doc, _ in results]

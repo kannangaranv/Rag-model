@@ -7,7 +7,8 @@ from pathlib import Path
 from pydantic import BaseModel
 from app.utils import (
     convert_pdf_to_markdown,
-    create_documents_from_md_text,
+    create_chunks_from_md_text,
+    create_documents_from_chunks,
     upload_documents_to_vector_store,
     get_similarity_context,
     get_llm_response
@@ -64,7 +65,8 @@ async def upload_documents(file: UploadFile = File(...)):
                 }
             )
             db.commit()
-        documents, uuids = create_documents_from_md_text(md_text)
+        chunks = create_chunks_from_md_text(md_text)
+        documents, uuids = create_documents_from_chunks(chunks)
         upload_documents_to_vector_store(documents, uuids)
 
         return {

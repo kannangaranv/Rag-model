@@ -2,7 +2,7 @@ import faiss
 from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
@@ -17,8 +17,8 @@ USER     = os.getenv("SQL_USER", "sa1")
 PASSWORD = os.getenv("SQL_PASSWORD", "123")
 DRIVER   = os.getenv("SQL_DRIVER", "ODBC Driver 18 for SQL Server")
 
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-
+# embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+embeddings = OpenAIEmbeddings()
 index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
 
 vector_store = FAISS(
