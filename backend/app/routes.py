@@ -94,9 +94,6 @@ async def query_documents(payload: QueryRequest):
     
 @router.get("/documents", response_model=DocumentListResponse)
 def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200)):
-    """
-    Returns paginated list of stored PDFs (metadata only).
-    """
     offset = (page - 1) * page_size
     with SessionLocal() as db:
         total = db.execute(text("SELECT COUNT(*) AS cnt FROM dbo.Documents")).scalar_one()
@@ -134,9 +131,6 @@ def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, 
 
 @router.get("/documents/{doc_id}/download")
 def download_document(doc_id: UUID):
-    """
-    Streams the PDF bytes back to client.
-    """
     with SessionLocal() as db:
         row = db.execute(
             text("""
@@ -150,7 +144,6 @@ def download_document(doc_id: UUID):
     if not row:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # row.Content is bytes (VARBINARY(MAX))
     file_like = BytesIO(row.Content)
 
     headers = {
@@ -164,10 +157,6 @@ def download_document(doc_id: UUID):
 
 @router.get("/documents/{doc_id}/view")
 def view_document(doc_id: UUID, request: Request):
-    """
-    Streams the PDF bytes with 'Content-Disposition: inline' and Range header support.
-    This lets the frontend display the PDF directly in an <iframe> or PDF viewer.
-    """
     with SessionLocal() as db:
         row = db.execute(
             text("""
@@ -186,7 +175,6 @@ def view_document(doc_id: UUID, request: Request):
     blob: bytes = row.Content
     total = len(blob)
 
-    # Byte-range support for PDF viewers
     range_header = request.headers.get("range")
     if range_header:
         rng = _parse_range_header(range_header, total)
@@ -199,10 +187,8 @@ def view_document(doc_id: UUID, request: Request):
                 "Content-Length": str(len(chunk)),
                 "Content-Disposition": f'inline; filename="{file_name}"',
             }
-            # 206 Partial Content
             return Response(content=chunk, status_code=206, media_type=content_type, headers=headers)
 
-    # No/invalid Range → return full file
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Length": str(total),
@@ -212,17 +198,12 @@ def view_document(doc_id: UUID, request: Request):
 
 
 def _parse_range_header(range_header: str, file_size: int):
-    """
-    Parses a Range header like 'bytes=START-END' and returns (start, end) (inclusive).
-    If END is omitted, it means 'to the end'. If START is omitted, it's a suffix range (not implemented here).
-    """
     try:
         units, _, rng = range_header.partition("=")
         if units.strip().lower() != "bytes":
             return None
         start_s, _, end_s = rng.partition("-")
         if start_s == "":
-            # Suffix ranges (bytes=-500) are uncommon for PDF viewers; return None to ignore
             return None
         start = int(start_s)
         end = int(end_s) if end_s else file_size - 1
