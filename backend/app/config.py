@@ -18,7 +18,7 @@ PASSWORD = os.getenv("SQL_PASSWORD", "123")
 DRIVER   = os.getenv("SQL_DRIVER", "ODBC Driver 18 for SQL Server")
 
 # embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-embeddings = OpenAIEmbeddings()
+embeddings = OpenAIEmbeddings(model = "text-embedding-ada-002", api_key = OPENAI_API_KEY)
 index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
 
 vector_store = FAISS(
