@@ -12,3 +12,6 @@ pymupdf4llm
 python-multipart
 sqlalchemy
 pyodbc
+moviepy==1.0.3
+pydub
+aiofiles
