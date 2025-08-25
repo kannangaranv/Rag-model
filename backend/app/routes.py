@@ -1,38 +1,44 @@
+import os
 import json
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import (
+    APIRouter,
+    HTTPException, 
+    UploadFile,
+    File
+)
 import tempfile
 import shutil
 from uuid import uuid4
 from pathlib import Path
-from pydantic import BaseModel
-from app.utils import (
-    convert_pdf_to_markdown,
-    create_chunks_from_md_text,
-    create_documents_from_chunks,
-    upload_documents_to_vector_store,
-    get_similarity_context,
-    get_llm_response
-)
 from sqlalchemy import text
 from app.config import SessionLocal
-from app.schemas import DocumentMeta, DocumentListResponse
+from app.schemas import DocumentMeta, DocumentListResponse,QueryRequest
 from fastapi import Query
 from uuid import UUID
 from io import BytesIO
 from fastapi.responses import StreamingResponse
 from fastapi import Request, Response
+from pathlib import Path
+import tempfile, os
+import time
+from app.pdf_utils import convert_pdf_to_markdown
+from app.utils import (
+    create_chunks_from_text,
+    create_documents_from_chunks,
+    upload_documents_to_vector_store,
+    get_similarity_context,
+    get_llm_response
+)
+from app.video_utils import get_transcription_from_video
+from app.file_utils import _parse_range_header
 
 router = APIRouter()
 
-class QueryRequest(BaseModel):
-    query: str
-
-# api to upload documents to vector store
 @router.post("/upload-documents")
 async def upload_documents(file: UploadFile = File(...)):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-
+    
     temp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -61,19 +67,18 @@ async def upload_documents(file: UploadFile = File(...)):
                     "ContentType": file.content_type,
                     "FileSizeBytes": file_size,
                     "Content": pdf_bytes,
-                    "MdText": "",
+                    "MdText": md_text,
                 }
             )
             db.commit()
-        chunks = create_chunks_from_md_text(md_text)
+        chunks = create_chunks_from_text(md_text)
         documents, uuids = create_documents_from_chunks(chunks)
         upload_documents_to_vector_store(documents, uuids)
 
         return {
-            "message": "Document saved to SQL Server and uploaded to vector store.",
+            "message": "Document uploaded to vector store.",
             "document_id": doc_id
         }
-
     except Exception as e:
         print(f"Error uploading document: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
@@ -81,6 +86,68 @@ async def upload_documents(file: UploadFile = File(...)):
     finally:
         if temp_path:
             temp_path.unlink(missing_ok=True)
+
+
+@router.post("/upload-videos")
+async def upload_videos(file: UploadFile = File(...)):
+    allowed = {"video/mp4", "video/x-m4v", "video/mpeg", "video/quicktime"}
+    if file.content_type not in allowed:
+        raise HTTPException(400, detail=f"Unsupported content type: {file.content_type}")
+
+    suffix = Path(file.filename or "").suffix.lower() or ".mp4"
+    fd, tmp_name = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    temp_path = Path(tmp_name)
+
+    try:
+        with open(temp_path, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024) 
+                if not chunk:
+                    break
+                out.write(chunk)
+            out.flush()
+            os.fsync(out.fileno())
+
+        video_bytes = temp_path.read_bytes()
+        file_size = temp_path.stat().st_size
+        video_id = str(uuid4()) 
+        transcription = get_transcription_from_video(str(temp_path))
+        with SessionLocal() as db:
+            db.execute(
+                text("""
+                    INSERT INTO dbo.Videos
+                        (Id, FileName, ContentType, FileSizeBytes, Content, Transcript)
+                    VALUES
+                        (CONVERT(uniqueidentifier, :Id),
+                         :FileName, :ContentType, :FileSizeBytes, :Content, :Transcript)
+                """),
+                {
+                    "Id": video_id,
+                    "FileName": file.filename or "video.mp4",
+                    "ContentType": file.content_type,
+                    "FileSizeBytes": file_size,
+                    "Content": video_bytes,
+                    "Transcript": transcription,
+                }
+            )
+            db.commit()
+
+        chunks = create_chunks_from_text(transcription)
+        documents, uuids = create_documents_from_chunks(chunks)
+        upload_documents_to_vector_store(documents, uuids)
+
+        return {
+            "message": "Video uploaded to vector store.",
+            "video_id": video_id
+        }
+
+    except Exception as e:
+        raise HTTPException(500, detail=f"Upload failed: {e}")
+    finally:
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
+
 
 # API to query documents and get responses from llm.
 @router.post("/query")
@@ -199,18 +266,5 @@ def view_document(doc_id: UUID, request: Request):
     return Response(content=blob, media_type=content_type, headers=headers)
 
 
-def _parse_range_header(range_header: str, file_size: int):
-    try:
-        units, _, rng = range_header.partition("=")
-        if units.strip().lower() != "bytes":
-            return None
-        start_s, _, end_s = rng.partition("-")
-        if start_s == "":
-            return None
-        start = int(start_s)
-        end = int(end_s) if end_s else file_size - 1
-        if start < 0 or end < start or end >= file_size:
-            return None
-        return start, end
-    except Exception:
-        return None
+
+    

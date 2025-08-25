@@ -4,32 +4,28 @@ from pydub import AudioSegment
 import os
 import tempfile
 import shutil
-import time
+import time 
+from pathlib import Path
 
 def extract_audio(video_path, audio_path):
-    t0 = time.perf_counter()
     try:
         clip = VideoFileClip(video_path)
         audio = clip.audio
         if audio:
             audio.write_audiofile(audio_path, codec='libmp3lame')
-            print(f"[OK] Audio extracted to {audio_path}")
+            print(f"Audio extracted to {audio_path}")
         else:
-            print("[WARN] No audio track found in the video.")
+            print("No audio track found in the video.")
         clip.reader.close()
         clip.audio.reader.close_proc()
     except Exception as e:
-        print(f"[ERR] Error extracting audio: {e}")
+        print(f"Error extracting audio: {e}")
         raise
-    finally:
-        t1 = time.perf_counter()
-        print(f"[TIME] Extract audio: {(t1 - t0):.2f}s")
 
 def get_file_size(file_path):
     return os.path.getsize(file_path)
 
 def split_audio(audio_path, chunk_dir, chunk_size=20 * 1024 * 1024):
-    print("Splitting audio into chunks...")
     t0 = time.perf_counter()
     os.makedirs(chunk_dir, exist_ok=True)
     chunks = []
@@ -49,8 +45,6 @@ def split_audio(audio_path, chunk_dir, chunk_size=20 * 1024 * 1024):
         chunks.append(chunk_path)
 
     t1 = time.perf_counter()
-    print(f"[OK] Generated {len(chunks)} chunks in {(t1 - t0):.2f}s "
-          f"(est. chunk duration ~{chunk_duration_ms/1000:.1f}s)")
     return chunks, (t1 - t0)
 
 def transcribe_audio_chunk(audio_path, client: OpenAI):
@@ -62,7 +56,6 @@ def transcribe_audio_chunk(audio_path, client: OpenAI):
     return response.text
 
 def transcribe_audio(audio_path):
-    print("Transcribing audio...")
     timings = {
         "split_seconds": 0.0,
         "chunks_count": 0,
@@ -73,7 +66,6 @@ def transcribe_audio(audio_path):
     chunk_dir = tempfile.mkdtemp(prefix="chunks_")
     chunks = []
     try:
-        # split
         chunks, split_secs = split_audio(audio_path, chunk_dir)
         timings["split_seconds"] = split_secs
         timings["chunks_count"] = len(chunks)
@@ -84,12 +76,11 @@ def transcribe_audio(audio_path):
         transcript_parts = []
         for i, chunk in enumerate(chunks):
             t0 = time.perf_counter()
-            print(f"[INFO] Transcribing chunk {i+1}/{len(chunks)}: {os.path.basename(chunk)}")
+            print(f"Transcribing chunk {i+1}/{len(chunks)}: {os.path.basename(chunk)}")
             text = transcribe_audio_chunk(chunk, client)
             t1 = time.perf_counter()
             dt = t1 - t0
             timings["per_chunk_seconds"].append(dt)
-            print(f"[TIME] Chunk {i+1}: {dt:.2f}s")
             transcript_parts.append(text)
 
         t_trans_total_end = time.perf_counter()
@@ -98,12 +89,11 @@ def transcribe_audio(audio_path):
         return " ".join(transcript_parts).strip(), timings
 
     finally:
-        # Cleanup chunk dir
         try:
             if os.path.exists(chunk_dir):
                 shutil.rmtree(chunk_dir)
         except Exception as e:
-            print(f"[WARN] Could not delete chunk dir: {e}")
+            print(f"Could not delete chunk dir: {e}")
 
 def format_seconds(sec: float) -> str:
     if sec < 60:
@@ -111,49 +101,25 @@ def format_seconds(sec: float) -> str:
     m, s = divmod(sec, 60)
     return f"{int(m)}m {s:.1f}s"
 
-def get_transcription_from_video(video_path):
-    """
-    Run end-to-end: extract audio -> split -> transcribe -> save transcript.
-    Prints a timing summary. Returns transcript text.
-    """
+def get_transcription_from_video(video_path: str | Path):
+    video_path = os.fspath(video_path)
     t_total_start = time.perf_counter()
 
-    # temp audio file
     with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_audio_file:
         audio_path = temp_audio_file.name
 
     extract_secs = 0.0
     try:
-        # reuse transcript if exists
-        if os.path.exists('transcription.txt'):
-            with open('transcription.txt', 'r', encoding='utf-8') as f:
-                transcription = f.read()
-            print("[INFO] Transcription loaded from file.")
-            # no timings in this branch
-            t_total_end = time.perf_counter()
-            print("\n=== Timing Summary ===")
-            print("Loaded existing transcription.txt (no processing).")
-            print(f"End-to-end total: {format_seconds(t_total_end - t_total_start)}")
-            return transcription
-
-        # extract
         t0 = time.perf_counter()
         extract_audio(video_path, audio_path)
         t1 = time.perf_counter()
         extract_secs = t1 - t0
 
-        # file size info
         file_size_mb = get_file_size(audio_path) / (1024 * 1024)
-        print(f"[INFO] Temporary audio size: {file_size_mb:.2f} MB")
+        print(f"Temporary audio size: {file_size_mb:.2f} MB")
 
-        # transcribe (includes split + per chunk)
         transcription, timings = transcribe_audio(audio_path)
 
-        # save
-        with open('transcription.txt', 'w', encoding='utf-8') as f:
-            f.write(transcription)
-
-        # summary
         t_total_end = time.perf_counter()
         end_to_end = t_total_end - t_total_start
 
@@ -171,12 +137,8 @@ def get_transcription_from_video(video_path):
         return transcription
 
     finally:
-        # Cleanup temp audio
         try:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
         except Exception as e:
-            print(f"[WARN] Could not delete temp audio file: {e}")
-
-# Run it and time it
-get_transcription_from_video("C:\\Users\\nuwank\\Documents\\BoardPAC\\Development\\Rag-model\\dataset\\test1.mp4")
+            print(f"Could not delete temp audio file: {e}")
