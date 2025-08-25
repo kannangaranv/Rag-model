@@ -3,6 +3,9 @@ from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 
+class QueryRequest(BaseModel):
+    query: str
+    
 class DocumentMeta(BaseModel):
     id: UUID
     file_name: str

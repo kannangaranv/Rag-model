@@ -1,9 +1,10 @@
-import pymupdf4llm
 from uuid import uuid4
 from pathlib import Path
 from langchain_core.documents import Document
 from typing import Optional, List
 from langchain_community.vectorstores import FAISS
+
+
 from app.config import (
     vector_store,
     llm,
@@ -14,11 +15,7 @@ VECTOR_DIR = Path("vector_store")
 
 vector_db: Optional[FAISS] = None
 
-def convert_pdf_to_markdown(pdf_path):
-    md_text = pymupdf4llm.to_markdown(pdf_path)
-    return md_text
-
-def create_chunks_from_md_text(text, chunk_size=500, overlap=50):
+def create_chunks_from_text(text, chunk_size=500, overlap=50):
     words = text.split()
     chunks = []
     for i in range(0, len(words), chunk_size - overlap):
@@ -42,13 +39,12 @@ def upload_documents_to_vector_store(documents, uuids):
     if (VECTOR_DIR / "index.faiss").exists() and (VECTOR_DIR / "index.pkl").exists():
         vector_db.add_documents(documents=documents, ids=uuids)
         vector_db.save_local("vector_store")
-        print("Documents uploaded to vector store successfully.")
         load_vector_store()
     else:
         vector_store.add_documents(documents=documents, ids=uuids)
         vector_store.save_local("vector_store")
         load_vector_store()
-        print("Documents uploaded to vector store successfully.")
+    print("Documents uploaded to vector store successfully.")
 
 def get_similarity_context(query, k=6,):
     query_embedding = embeddings.embed_query(query)
@@ -95,7 +91,8 @@ def load_vector_store() -> None:
             embeddings=embeddings,
             allow_dangerous_deserialization=True,
         )
-        print(f"[VectorStore] Loaded from {VECTOR_DIR}")
+        print(f"VectorStore Loaded from {VECTOR_DIR}")
     else:
         vector_db = None
-        print("[VectorStore] Not found; start by uploading a PDF.")
+        print("VectorStore Not found; start by uploading a PDF.")
+
