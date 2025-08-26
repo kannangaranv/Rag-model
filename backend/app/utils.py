@@ -94,5 +94,5 @@ def load_vector_store() -> None:
         print(f"VectorStore Loaded from {VECTOR_DIR}")
     else:
         vector_db = None
-        print("VectorStore Not found; start by uploading a PDF.")
+        print("VectorStore Not found; start by uploading a PDF/Video.")
 

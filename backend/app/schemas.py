@@ -19,3 +19,16 @@ class DocumentListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+class VideoMeta(BaseModel):
+    id: UUID
+    file_name: str
+    content_type: Optional[str] = None
+    file_size_bytes: int
+    uploaded_at: datetime
+
+class VideoListResponse(BaseModel):
+    items: List[VideoMeta]
+    total: int
+    page: int
+    page_size: int

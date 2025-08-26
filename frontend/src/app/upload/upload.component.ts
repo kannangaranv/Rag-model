@@ -1,6 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpEventType } from '@angular/common/http';
-import { OpenAiApiService, DocumentMeta, DocumentListResponse } from '../services/open-ai-api.service';
+import {
+  OpenAiApiService,
+  DocumentMeta,
+  DocumentListResponse,
+  VideoMeta,
+  VideoListResponse
+} from '../services/open-ai-api.service';
 
 @Component({
   selector: 'app-upload',
@@ -8,141 +14,263 @@ import { OpenAiApiService, DocumentMeta, DocumentListResponse } from '../service
   styleUrls: ['./upload.component.css'],
 })
 export class UploadComponent implements OnInit {
-  file: File | null = null;
-  uploading = false;
-  progress = 0;
-  message = '';
-  error = '';
-  dragOver = false;
+  pdfFile: File | null = null;
+  pdfUploading = false;
+  pdfProgress = 0;
+  pdfMessage = '';
+  pdfError = '';
+  dragOverPdf = false;
 
   docs: DocumentMeta[] = [];
   docsLoading = false;
-  page = 1;
-  pageSize = 10;
-  total = 0;
-  q = ''; 
+  pageDocs = 1;
+  pageSizeDocs = 10;
+  totalDocs = 0;
+  qDocs = '';
+
+  videoFile: File | null = null;
+  videoUploading = false;
+  videoProgress = 0;
+  videoMessage = '';
+  videoError = '';
+  dragOverVideo = false;
+
+  videos: VideoMeta[] = [];
+  videosLoading = false;
+  pageVideos = 1;
+  pageSizeVideos = 10;
+  totalVideos = 0;
+  qVideos = '';
 
   constructor(private api: OpenAiApiService) {}
 
   ngOnInit(): void {
     this.loadDocuments(1);
+    this.loadVideos(1);
   }
 
-  onFileSelected(evt: Event) {
+  onPdfFileSelected(evt: Event) {
     const input = evt.target as HTMLInputElement;
     const picked = input.files?.[0] || null;
-    if (picked) this.setFile(picked);
-    if (input) input.value = ''; 
+    if (picked) this.setPdfFile(picked);
+    if (input) input.value = '';
   }
 
-  onDragOver(e: DragEvent) {
+  onPdfDragOver(e: DragEvent) {
     e.preventDefault();
-    this.dragOver = true;
+    this.dragOverPdf = true;
   }
-
-  onDragLeave(_: DragEvent) {
-    this.dragOver = false;
+  onPdfDragLeave(_: DragEvent) {
+    this.dragOverPdf = false;
   }
-
-  onDrop(e: DragEvent) {
+  onPdfDrop(e: DragEvent) {
     e.preventDefault();
-    this.dragOver = false;
+    this.dragOverPdf = false;
     const dropped = e.dataTransfer?.files?.[0] || null;
-    if (dropped) this.setFile(dropped);
+    if (dropped) this.setPdfFile(dropped);
   }
 
-  setFile(f: File) {
-    this.message = '';
-    this.error = '';
+  setPdfFile(f: File) {
+    this.pdfMessage = '';
+    this.pdfError = '';
     if (f.type !== 'application/pdf') {
-      this.error = 'Only PDF files are allowed.';
-      this.file = null;
+      this.pdfError = 'Only PDF files are allowed.';
+      this.pdfFile = null;
       return;
     }
     const MAX_MB = 50;
     if (f.size > MAX_MB * 1024 * 1024) {
-      this.error = `File is too large. Max ${MAX_MB} MB.`;
-      this.file = null;
+      this.pdfError = `File is too large. Max ${MAX_MB} MB.`;
+      this.pdfFile = null;
       return;
     }
-    this.file = f;
+    this.pdfFile = f;
   }
 
-  clearFile() {
-    if (this.uploading) return;
-    this.file = null;
-    this.message = '';
-    this.error = '';
-    this.progress = 0;
+  clearPdfFile() {
+    if (this.pdfUploading) return;
+    this.pdfFile = null;
+    this.pdfMessage = '';
+    this.pdfError = '';
+    this.pdfProgress = 0;
   }
 
-  upload() {
-    if (!this.file || this.uploading) return;
-    this.uploading = true;
-    this.progress = 0;
-    this.message = '';
-    this.error = '';
+  uploadPdf() {
+    if (!this.pdfFile || this.pdfUploading) return;
+    this.pdfUploading = true;
+    this.pdfProgress = 0;
+    this.pdfMessage = '';
+    this.pdfError = '';
 
-    this.api.uploadDocumentWithProgress(this.file).subscribe({
+    this.api.uploadDocumentWithProgress(this.pdfFile).subscribe({
       next: (event) => {
         if (event.type === HttpEventType.UploadProgress && event.total) {
-          this.progress = Math.round((event.loaded / event.total) * 100);
+          this.pdfProgress = Math.round((event.loaded / event.total) * 100);
         } else if (event.type === HttpEventType.Response) {
-          this.uploading = false;
-          this.message = event.body?.message ?? 'Uploaded.';
-          this.file = null;
+          this.pdfUploading = false;
+          this.pdfMessage = event.body?.message ?? 'Uploaded.';
+          this.pdfFile = null;
           this.loadDocuments(1);
         }
       },
       error: () => {
-        this.uploading = false;
-        this.error = 'Upload failed. Please try again.';
+        this.pdfUploading = false;
+        this.pdfError = 'Upload failed. Please try again.';
       },
     });
   }
 
-  loadDocuments(page: number = this.page) {
+  loadDocuments(page: number = this.pageDocs) {
     this.docsLoading = true;
-    this.api.getDocuments(page, this.pageSize, this.q).subscribe({
+    this.api.getDocuments(page, this.pageSizeDocs, this.qDocs).subscribe({
       next: (res: DocumentListResponse) => {
         this.docs = res.items || [];
-        this.total = res.total || 0;
-        this.page = res.page || page;
-        this.pageSize = res.page_size || this.pageSize;
+        this.totalDocs = res.total || 0;
+        this.pageDocs = res.page || page;
+        this.pageSizeDocs = res.page_size || this.pageSizeDocs;
         this.docsLoading = false;
       },
       error: () => {
         this.docs = [];
-        this.total = 0;
+        this.totalDocs = 0;
         this.docsLoading = false;
       }
     });
   }
 
-  onSearchEnter() {
+  onPdfSearchEnter() {
     this.loadDocuments(1);
   }
 
-  prevPage() {
-    if (this.page > 1) this.loadDocuments(this.page - 1);
+  prevDocPage() {
+    if (this.pageDocs > 1) this.loadDocuments(this.pageDocs - 1);
   }
-  nextPage() {
-    const maxPage = Math.max(1, Math.ceil(this.total / this.pageSize));
-    if (this.page < maxPage) this.loadDocuments(this.page + 1);
+  nextDocPage() {
+    const maxPage = Math.max(1, Math.ceil(this.totalDocs / this.pageSizeDocs));
+    if (this.pageDocs < maxPage) this.loadDocuments(this.pageDocs + 1);
   }
 
-  view(doc: DocumentMeta) {
+  viewDoc(doc: DocumentMeta) {
     window.open(this.api.docViewUrl(doc.id), '_blank');
   }
-
-  download(doc: DocumentMeta) {
+  downloadDoc(doc: DocumentMeta) {
     window.open(this.api.docDownloadUrl(doc.id), '_blank');
   }
 
-  isInVectorStore(doc: DocumentMeta) {
-    if (typeof doc.in_vector_store === 'boolean') return doc.in_vector_store;
-    if (typeof doc.has_md_text === 'boolean') return doc.has_md_text;
-    return false; 
+  onVideoFileSelected(evt: Event) {
+    const input = evt.target as HTMLInputElement;
+    const picked = input.files?.[0] || null;
+    if (picked) this.setVideoFile(picked);
+    if (input) input.value = '';
+  }
+
+  onVideoDragOver(e: DragEvent) {
+    e.preventDefault();
+    this.dragOverVideo = true;
+  }
+  onVideoDragLeave(_: DragEvent) {
+    this.dragOverVideo = false;
+  }
+  onVideoDrop(e: DragEvent) {
+    e.preventDefault();
+    this.dragOverVideo = false;
+    const dropped = e.dataTransfer?.files?.[0] || null;
+    if (dropped) this.setVideoFile(dropped);
+  }
+
+  setVideoFile(f: File) {
+    this.videoMessage = '';
+    this.videoError = '';
+
+    const allowed = [
+      'video/mp4',
+      'video/quicktime',
+      'video/x-matroska',
+      'video/webm',
+      'video/mpeg'
+    ];
+    if (!allowed.includes(f.type)) {
+      this.videoError = 'Only video files (.mp4, .mov, .mkv, .webm, .mpeg) are allowed.';
+      this.videoFile = null;
+      return;
+    }
+    const MAX_MB = 1024 * 2;
+    if (f.size > MAX_MB * 1024 * 1024) {
+      this.videoError = `File is too large. Max ${MAX_MB} MB.`;
+      this.videoFile = null;
+      return;
+    }
+    this.videoFile = f;
+  }
+
+  clearVideoFile() {
+    if (this.videoUploading) return;
+    this.videoFile = null;
+    this.videoMessage = '';
+    this.videoError = '';
+    this.videoProgress = 0;
+  }
+
+  uploadVideo() {
+    if (!this.videoFile || this.videoUploading) return;
+    this.videoUploading = true;
+    this.videoProgress = 0;
+    this.videoMessage = '';
+    this.videoError = '';
+
+    this.api.uploadVideoWithProgress(this.videoFile).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.UploadProgress && event.total) {
+          this.videoProgress = Math.round((event.loaded / event.total) * 100);
+        } else if (event.type === HttpEventType.Response) {
+          this.videoUploading = false;
+          this.videoMessage = event.body?.message ?? 'Uploaded.';
+          this.videoFile = null;
+          this.loadVideos(1);
+        }
+      },
+      error: () => {
+        this.videoUploading = false;
+        this.videoError = 'Upload failed. Please try again.';
+      },
+    });
+  }
+
+  loadVideos(page: number = this.pageVideos) {
+    this.videosLoading = true;
+    this.api.getVideos(page, this.pageSizeVideos, this.qVideos).subscribe({
+      next: (res: VideoListResponse) => {
+        this.videos = res.items || [];
+        this.totalVideos = res.total || 0;
+        this.pageVideos = res.page || page;
+        this.pageSizeVideos = res.page_size || this.pageSizeVideos;
+        this.videosLoading = false;
+      },
+      error: () => {
+        this.videos = [];
+        this.totalVideos = 0;
+        this.videosLoading = false;
+      }
+    });
+  }
+
+  onVideoSearchEnter() {
+    this.loadVideos(1);
+  }
+
+  prevVideoPage() {
+    if (this.pageVideos > 1) this.loadVideos(this.pageVideos - 1);
+  }
+  nextVideoPage() {
+    const maxPage = Math.max(1, Math.ceil(this.totalVideos / this.pageSizeVideos));
+    if (this.pageVideos < maxPage) this.loadVideos(this.pageVideos + 1);
+  }
+
+  viewVideo(v: VideoMeta) {
+    window.open(this.api.videoViewUrl(v.id), '_blank');
+  }
+  downloadVideo(v: VideoMeta) {
+    window.open(this.api.videoDownloadUrl(v.id), '_blank');
   }
 
   formatSize(bytes: number) {
@@ -152,9 +280,13 @@ export class UploadComponent implements OnInit {
     return `${(kb / 1024).toFixed(1)} MB`;
   }
 
-    get totalPages(): number {
-      if (!this.total || !this.pageSize) return 1;
-      return Math.max(1, Math.ceil(this.total / this.pageSize));
-    }
+  get totalDocPages(): number {
+    if (!this.totalDocs || !this.pageSizeDocs) return 1;
+    return Math.max(1, Math.ceil(this.totalDocs / this.pageSizeDocs));
+  }
 
+  get totalVideoPages(): number {
+    if (!this.totalVideos || !this.pageSizeVideos) return 1;
+    return Math.max(1, Math.ceil(this.totalVideos / this.pageSizeVideos));
+  }
 }

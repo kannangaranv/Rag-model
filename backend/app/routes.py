@@ -12,7 +12,13 @@ from uuid import uuid4
 from pathlib import Path
 from sqlalchemy import text
 from app.config import SessionLocal
-from app.schemas import DocumentMeta, DocumentListResponse,QueryRequest
+from app.schemas import (
+    DocumentMeta,
+    DocumentListResponse,
+    QueryRequest,
+    VideoListResponse,
+    VideoMeta
+)
 from fastapi import Query
 from uuid import UUID
 from io import BytesIO
@@ -34,6 +40,7 @@ from app.file_utils import _parse_range_header
 
 router = APIRouter()
 
+# Upload pdf to vector store and sql server
 @router.post("/upload-documents")
 async def upload_documents(file: UploadFile = File(...)):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
@@ -265,6 +272,124 @@ def view_document(doc_id: UUID, request: Request):
     }
     return Response(content=blob, media_type=content_type, headers=headers)
 
+@router.get("/videos", response_model=VideoListResponse)
+def list_videos(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+):
+    """
+    Paginated list of videos stored in dbo.Videos.
+    """
+    offset = (page - 1) * page_size
+    with SessionLocal() as db:
+        total = db.execute(text("SELECT COUNT(*) AS cnt FROM dbo.Videos")).scalar_one()
 
+        rows = db.execute(
+            text("""
+                SELECT
+                    Id,
+                    FileName,
+                    ContentType,
+                    FileSizeBytes,
+                    UploadedAt
+                FROM dbo.Videos
+                ORDER BY UploadedAt DESC
+                OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+            """),
+            {"offset": offset, "limit": page_size}
+        ).all()
+
+    items = [
+        VideoMeta(
+            id=row.Id,
+            file_name=row.FileName,
+            content_type=row.ContentType,
+            file_size_bytes=row.FileSizeBytes,
+            uploaded_at=row.UploadedAt,
+        )
+        for row in rows
+    ]
+
+    return VideoListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/videos/{video_id}/download")
+def download_video(video_id: UUID):
+    """
+    Download the full video as an attachment.
+    """
+    with SessionLocal() as db:
+        row = db.execute(
+            text("""
+                SELECT FileName, ContentType, Content
+                FROM dbo.Videos
+                WHERE Id = CONVERT(uniqueidentifier, :id)
+            """),
+            {"id": str(video_id)}
+        ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    file_like = BytesIO(row.Content)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{row.FileName}"'
+    }
+    return StreamingResponse(
+        file_like,
+        media_type=row.ContentType or "video/mp4",
+        headers=headers
+    )
+
+
+@router.get("/videos/{video_id}/view")
+def view_video(video_id: UUID, request: Request):
+    """
+    Inline video view with HTTP Range support for efficient streaming/seeking.
+    """
+    with SessionLocal() as db:
+        row = db.execute(
+            text("""
+                SELECT FileName, ContentType, Content
+                FROM dbo.Videos
+                WHERE Id = CONVERT(uniqueidentifier, :id)
+            """),
+            {"id": str(video_id)}
+        ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    content_type = row.ContentType or "video/mp4"
+    file_name = row.FileName or "video.mp4"
+    blob: bytes = row.Content
+    total = len(blob)
+
+    range_header = request.headers.get("range")
+    if range_header:
+        rng = _parse_range_header(range_header, total)
+        if rng:
+            start, end = rng
+            # Note: end is inclusive per Content-Range semantics
+            chunk = blob[start:end + 1]
+            headers = {
+                "Content-Range": f"bytes {start}-{end}/{total}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(len(chunk)),
+                "Content-Disposition": f'inline; filename="{file_name}"',
+            }
+            return Response(
+                content=chunk,
+                status_code=206,
+                media_type=content_type,
+                headers=headers
+            )
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(total),
+        "Content-Disposition": f'inline; filename="{file_name}"',
+    }
+    return Response(content=blob, media_type=content_type, headers=headers)
 
     
