@@ -3,13 +3,13 @@
 
   <div
     class="dropzone"
-    [class.dragover]="dragOver"
-    (dragover)="onDragOver($event)"
-    (dragleave)="onDragLeave($event)"
-    (drop)="onDrop($event)"
-    (click)="fileInput.click()"
+    [class.dragover]="dragOverPdf"
+    (dragover)="onPdfDragOver($event)"
+    (dragleave)="onPdfDragLeave($event)"
+    (drop)="onPdfDrop($event)"
+    (click)="pdfInput.click()"
     tabindex="0"
-    (keydown.enter)="fileInput.click()"
+    (keydown.enter)="pdfInput.click()"
     aria-label="Upload PDF. Click or drag & drop."
   >
     <div class="dz-icon">
@@ -23,40 +23,37 @@
     </div>
 
     <input
-      #fileInput
+      #pdfInput
       type="file"
       accept="application/pdf"
-      (change)="onFileSelected($event)"
+      (change)="onPdfFileSelected($event)"
       hidden
     />
   </div>
 
-  <div class="file-row" *ngIf="file">
+  <div class="file-row" *ngIf="pdfFile">
     <div class="file-meta">
-      <div class="file-name" [title]="file.name">{{ file.name }}</div>
-      <div class="file-size">{{ formatSize(file.size) }}</div>
+      <div class="file-name" [title]="pdfFile.name">{{ pdfFile.name }}</div>
+      <div class="file-size">{{ formatSize(pdfFile.size) }}</div>
     </div>
-    <button class="btn-link" (click)="clearFile()" [disabled]="uploading">Remove</button>
+    <button class="btn-link" (click)="clearPdfFile()" [disabled]="pdfUploading">Remove</button>
   </div>
 
-
-  <div class="progress-wrap" *ngIf="uploading">
+  <div class="progress-wrap" *ngIf="pdfUploading">
     <div class="progress-bar">
-      <div class="progress-fill" [style.width.%]="progress"></div>
+      <div class="progress-fill" [style.width.%]="pdfProgress"></div>
     </div>
-    <div class="progress-label">{{ progress }}%</div>
+    <div class="progress-label">{{ pdfProgress }}%</div>
   </div>
 
- 
   <div class="actions">
-    <button class="btn btn-primary" (click)="upload()" [disabled]="!file || uploading">
-      {{ uploading ? 'Uploading…' : 'Upload PDF' }}
+    <button class="btn btn-primary" (click)="uploadPdf()" [disabled]="!pdfFile || pdfUploading">
+      {{ pdfUploading ? 'Uploading…' : 'Upload PDF' }}
     </button>
-    <span class="status success" *ngIf="!uploading && message && !error">{{ message }}</span>
-    <span class="status error" *ngIf="!uploading && error">{{ error }}</span>
+    <span class="status success" *ngIf="!pdfUploading && pdfMessage && !pdfError">{{ pdfMessage }}</span>
+    <span class="status error" *ngIf="!pdfUploading && pdfError">{{ pdfError }}</span>
   </div>
 </div>
-
 
 <div class="docs-card">
   <div class="docs-header">
@@ -65,14 +62,14 @@
       <input
         type="text"
         placeholder="Search filename…"
-        [(ngModel)]="q"
-        (keyup.enter)="onSearchEnter()"
+        [(ngModel)]="qDocs"
+        (keyup.enter)="onPdfSearchEnter()"
       />
       <button class="btn btn-secondary" (click)="loadDocuments(1)">Refresh</button>
     </div>
   </div>
 
-  <div class="docs-body" *ngIf="!docsLoading; else loadingTpl">
+  <div class="docs-body" *ngIf="!docsLoading; else pdfLoadingTpl">
     <div *ngIf="docs.length === 0" class="empty">No documents found.</div>
 
     <table class="docs-table" *ngIf="docs.length > 0">
@@ -82,7 +79,6 @@
           <th>File name</th>
           <th>Size</th>
           <th>Uploaded</th>
-          <th>Vector Store</th>
           <th style="width: 160px;">Actions</th>
         </tr>
       </thead>
@@ -94,33 +90,134 @@
           <td class="truncate" [title]="d.file_name">{{ d.file_name }}</td>
           <td>{{ formatSize(d.file_size_bytes) }}</td>
           <td>{{ d.uploaded_at | date:'medium' }}</td>
-          <td>
-            <span
-              class="badge"
-              [class.badge-ok]="isInVectorStore(d)"
-              [class.badge-warn]="!isInVectorStore(d)"
-            >
-              {{ isInVectorStore(d) ? 'In Vector Store' : 'Not Indexed' }}
-            </span>
-          </td>
           <td class="actions-cell">
-            <button class="btn btn-text" (click)="view(d)">Preview</button>
-            <button class="btn btn-text" (click)="download(d)">Download</button>
+            <button class="btn btn-text" (click)="viewDoc(d)">Preview</button>
+            <button class="btn btn-text" (click)="downloadDoc(d)">Download</button>
           </td>
         </tr>
       </tbody>
     </table>
 
-   
-    <div class="pager" *ngIf="total > pageSize">
-      <button class="btn btn-secondary" (click)="prevPage()" [disabled]="page === 1">Prev</button>
-      <span>Page {{ page }} / {{ totalPages }}</span>
-<button class="btn btn-secondary" (click)="nextPage()" [disabled]="page >= totalPages">Next</button>
-
+    <div class="pager" *ngIf="totalDocs > pageSizeDocs">
+      <button class="btn btn-secondary" (click)="prevDocPage()" [disabled]="pageDocs === 1">Prev</button>
+      <span>Page {{ pageDocs }} / {{ totalDocPages }}</span>
+      <button class="btn btn-secondary" (click)="nextDocPage()" [disabled]="pageDocs >= totalDocPages">Next</button>
     </div>
   </div>
 
-  <ng-template #loadingTpl>
+  <ng-template #pdfLoadingTpl>
     <div class="loading-row">Loading documents…</div>
+  </ng-template>
+</div>
+
+<div class="uploader-card">
+  <h3 class="uploader-title">Upload Training Video</h3>
+
+  <div
+    class="dropzone"
+    [class.dragover]="dragOverVideo"
+    (dragover)="onVideoDragOver($event)"
+    (dragleave)="onVideoDragLeave($event)"
+    (drop)="onVideoDrop($event)"
+    (click)="videoInput.click()"
+    tabindex="0"
+    (keydown.enter)="videoInput.click()"
+    aria-label="Upload Video. Click or drag & drop."
+  >
+    <div class="dz-icon">
+      <img src="assets/images/video.png" alt="Video Icon" />
+    </div>
+
+    <div class="dz-text">
+      <strong>Upload a Video</strong>
+      <span>Drag & drop your file here, or <u>browse</u></span>
+      <small>Only .mp4 • Max 2 GB</small>
+    </div>
+
+    <input
+      #videoInput
+      type="file"
+      accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/mpeg"
+      (change)="onVideoFileSelected($event)"
+      hidden
+    />
+  </div>
+
+  <div class="file-row" *ngIf="videoFile">
+    <div class="file-meta">
+      <div class="file-name" [title]="videoFile.name">{{ videoFile.name }}</div>
+      <div class="file-size">{{ formatSize(videoFile.size) }}</div>
+    </div>
+    <button class="btn-link" (click)="clearVideoFile()" [disabled]="videoUploading">Remove</button>
+  </div>
+
+  <div class="progress-wrap" *ngIf="videoUploading">
+    <div class="progress-bar">
+      <div class="progress-fill" [style.width.%]="videoProgress"></div>
+    </div>
+    <div class="progress-label">{{ videoProgress }}%</div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" (click)="uploadVideo()" [disabled]="!videoFile || videoUploading">
+      {{ videoUploading ? 'Uploading…' : 'Upload Video' }}
+    </button>
+    <span class="status success" *ngIf="!videoUploading && videoMessage && !videoError">{{ videoMessage }}</span>
+    <span class="status error" *ngIf="!videoUploading && videoError">{{ videoError }}</span>
+  </div>
+</div>
+
+<div class="docs-card">
+  <div class="docs-header">
+    <h4>Stored Videos</h4>
+    <div class="docs-controls">
+      <input
+        type="text"
+        placeholder="Search filename…"
+        [(ngModel)]="qVideos"
+        (keyup.enter)="onVideoSearchEnter()"
+      />
+      <button class="btn btn-secondary" (click)="loadVideos(1)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="docs-body" *ngIf="!videosLoading; else videoLoadingTpl">
+    <div *ngIf="videos.length === 0" class="empty">No videos found.</div>
+
+    <table class="docs-table" *ngIf="videos.length > 0">
+      <thead>
+        <tr>
+          <th style="width: 36px;"></th>
+          <th>File name</th>
+          <th>Size</th>
+          <th>Uploaded</th>
+          <th style="width: 200px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let v of videos">
+          <td class="icon-cell">
+            <img src="assets/images/video.png" alt="Video" class="row-icon" />
+          </td>
+          <td class="truncate" [title]="v.file_name">{{ v.file_name }}</td>
+          <td>{{ formatSize(v.file_size_bytes) }}</td>
+          <td>{{ v.uploaded_at | date:'medium' }}</td>
+          <td class="actions-cell">
+            <button class="btn btn-text" (click)="viewVideo(v)">Preview</button>
+            <button class="btn btn-text" (click)="downloadVideo(v)">Download</button>
+           </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pager" *ngIf="totalVideos > pageSizeVideos">
+      <button class="btn btn-secondary" (click)="prevVideoPage()" [disabled]="pageVideos === 1">Prev</button>
+      <span>Page {{ pageVideos }} / {{ totalVideoPages }}</span>
+      <button class="btn btn-secondary" (click)="nextVideoPage()" [disabled]="pageVideos >= totalVideoPages">Next</button>
+    </div>
+  </div>
+
+  <ng-template #videoLoadingTpl>
+    <div class="loading-row">Loading videos…</div>
   </ng-template>
 </div>

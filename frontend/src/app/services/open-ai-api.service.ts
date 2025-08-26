@@ -1,7 +1,8 @@
-import { HttpClient } from '@angular/common/http';
+import {  HttpClient, HttpEvent } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { environment } from 'src/environments/enviornment';
 import { HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
 
 export interface DocumentMeta {
   id: string;
@@ -18,6 +19,24 @@ export interface DocumentListResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface VideoMeta {
+  id: string;
+  file_name: string;
+  file_size_bytes: number;
+  uploaded_at: string;
+  status?: 'pending' | 'processing' | 'processed' | 'failed';
+  // optional fields if backend provides:
+  duration_seconds?: number;
+  thumbnail_url?: string;
+}
+
+export interface VideoListResponse {
+  items: VideoMeta[];
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 @Injectable({
@@ -59,11 +78,34 @@ export class OpenAiApiService {
       if (q) params = params.set('q', q);  
       return this.http.get<DocumentListResponse>(`${this.apiUrl}/documents`, { params });
     }
-    docViewUrl(id: string) {
+  docViewUrl(id: string) {
       return `${this.apiUrl}/documents/${id}/view`;
     }
-    docDownloadUrl(id: string) {
+
+  docDownloadUrl(id: string) {
       return `${this.apiUrl}/documents/${id}/download`;
     }
+
+  uploadVideoWithProgress(file: File): Observable<HttpEvent<any>> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<any>(`${this.apiUrl}/upload-videos`, form, {
+      reportProgress: true,
+      observe: 'events',
+    });
+  }
+
+  getVideos(page = 1, pageSize = 10, q = ''): Observable<VideoListResponse> {
+    const params = { page, page_size: pageSize, q };
+    return this.http.get<VideoListResponse>(`${this.apiUrl}/videos`, { params: params as any });
+  }
+
+  videoViewUrl(id: string) {
+    return `${this.apiUrl}/videos/${id}/view`;
+  }
+
+  videoDownloadUrl(id: string) {
+    return `${this.apiUrl}/videos/${id}/download`;
+  }
 
 }
