@@ -1,6 +1,6 @@
 # RAG Pipeline — Architecture & Design
 
-This README provides the architecture diagram and the editable Canva design link.
+This README provides the architecture diagram and the Canva design link.
 
 ## 📌 Canva Design 
 - **Canva link:** [https://www.canva.com/design/DAGxP-ec5Qg/tH9XBKkyKc10EHghR4wjbg/view?utm_content=DAGxP-ec5Qg&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h7bda3581be](https://www.canva.com/design/DAGxP-ec5Qg/tH9XBKkyKc10EHghR4wjbg/view?utm_content=DAGxP-ec5Qg&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h7bda3581be)
