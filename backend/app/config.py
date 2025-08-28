@@ -47,7 +47,8 @@ conn_str = (
 )
 odbc_connect = urllib.parse.quote_plus(conn_str)
 
-engine = create_engine(f"mssql+pyodbc:///?odbc_connect={odbc_connect}", fast_executemany=True)
+engine = create_engine(f"mssql+pyodbc:///?odbc_connect={odbc_connect}", fast_executemany=True, echo=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()
+
 

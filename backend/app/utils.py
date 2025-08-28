@@ -3,6 +3,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 from typing import Optional, List
 from langchain_community.vectorstores import FAISS
+from app.config import engine, Base
 
 
 from app.config import (
