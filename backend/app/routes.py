@@ -32,8 +32,7 @@ from app.utils import (
     create_chunks_from_text,
     create_documents_from_chunks,
     upload_documents_to_vector_store,
-    get_similarity_context,
-    get_llm_response
+    invoke_and_save
 )
 from app.video_utils import get_transcription_from_video
 from app.file_utils import _parse_range_header
@@ -162,8 +161,7 @@ async def query_documents(payload: QueryRequest):
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     try:
-        context = get_similarity_context(payload.query)
-        response = get_llm_response(payload.query, context)
+        response = invoke_and_save("123", payload.query)
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

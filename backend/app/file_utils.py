@@ -1,3 +1,4 @@
+# File utility functions
 def _parse_range_header(range_header: str, file_size: int):
     try:
         units, _, rng = range_header.partition("=")

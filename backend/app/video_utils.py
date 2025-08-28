@@ -7,6 +7,7 @@ import shutil
 import time 
 from pathlib import Path
 
+# Extract audio from video
 def extract_audio(video_path, audio_path):
     try:
         clip = VideoFileClip(video_path)
@@ -22,9 +23,11 @@ def extract_audio(video_path, audio_path):
         print(f"Error extracting audio: {e}")
         raise
 
+# Get the size of a file
 def get_file_size(file_path):
     return os.path.getsize(file_path)
 
+# Split audio into chunks
 def split_audio(audio_path, chunk_dir, chunk_size=20 * 1024 * 1024):
     t0 = time.perf_counter()
     os.makedirs(chunk_dir, exist_ok=True)
@@ -47,6 +50,7 @@ def split_audio(audio_path, chunk_dir, chunk_size=20 * 1024 * 1024):
     t1 = time.perf_counter()
     return chunks, (t1 - t0)
 
+# Transcribe a single audio chunk
 def transcribe_audio_chunk(audio_path, client: OpenAI):
     with open(audio_path, "rb") as audio_file:
         response = client.audio.transcriptions.create(
@@ -55,6 +59,7 @@ def transcribe_audio_chunk(audio_path, client: OpenAI):
         )
     return response.text
 
+# Transcribe audio
 def transcribe_audio(audio_path):
     timings = {
         "split_seconds": 0.0,
@@ -95,12 +100,14 @@ def transcribe_audio(audio_path):
         except Exception as e:
             print(f"Could not delete chunk dir: {e}")
 
+# Format seconds into a human-readable string
 def format_seconds(sec: float) -> str:
     if sec < 60:
         return f"{sec:.2f}s"
     m, s = divmod(sec, 60)
     return f"{int(m)}m {s:.1f}s"
 
+# Get transcription from video
 def get_transcription_from_video(video_path: str | Path):
     video_path = os.fspath(video_path)
     t_total_start = time.perf_counter()

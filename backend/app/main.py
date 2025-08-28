@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Base, engine
 from app import models   
 
-
+# Create the database tables and load the vector store
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_vector_store()
@@ -19,7 +19,6 @@ app = FastAPI(lifespan=lifespan)
 ALLOWED_ORIGINS = [
     "http://localhost:4200",
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -27,6 +26,5 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 app.include_router(api_router, prefix="/api")
