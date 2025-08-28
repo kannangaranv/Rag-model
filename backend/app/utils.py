@@ -51,7 +51,7 @@ def get_similarity_context(query, k=6,):
     results = vector_db.similarity_search_with_score_by_vector(query_embedding, k=k)
     retrieved_docs = [doc.page_content for doc, _ in results]
     context = "\n\n".join(retrieved_docs)
-    return context
+    return retrieved_docs
 
 def get_llm_response(query, context):
     messages = [
