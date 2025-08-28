@@ -94,7 +94,7 @@ async def upload_documents(file: UploadFile = File(...)):
         if temp_path:
             temp_path.unlink(missing_ok=True)
 
-
+# Upload video to vector store and sql server
 @router.post("/upload-videos")
 async def upload_videos(file: UploadFile = File(...)):
     allowed = {"video/mp4", "video/x-m4v", "video/mpeg", "video/quicktime"}
@@ -167,7 +167,8 @@ async def query_documents(payload: QueryRequest):
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+# API to list documents
 @router.get("/documents", response_model=DocumentListResponse)
 def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200)):
     offset = (page - 1) * page_size
@@ -204,7 +205,7 @@ def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, 
 
     return DocumentListResponse(items=items, total=total, page=page, page_size=page_size)
 
-
+# API to download documents
 @router.get("/documents/{doc_id}/download")
 def download_document(doc_id: UUID):
     with SessionLocal() as db:
@@ -231,6 +232,7 @@ def download_document(doc_id: UUID):
         headers=headers
     )
 
+# API to view documents
 @router.get("/documents/{doc_id}/view")
 def view_document(doc_id: UUID, request: Request):
     with SessionLocal() as db:
@@ -272,6 +274,7 @@ def view_document(doc_id: UUID, request: Request):
     }
     return Response(content=blob, media_type=content_type, headers=headers)
 
+# API to list videos
 @router.get("/videos", response_model=VideoListResponse)
 def list_videos(
     page: int = Query(1, ge=1),
@@ -312,7 +315,7 @@ def list_videos(
 
     return VideoListResponse(items=items, total=total, page=page, page_size=page_size)
 
-
+# API to download videos
 @router.get("/videos/{video_id}/download")
 def download_video(video_id: UUID):
     """
@@ -341,7 +344,7 @@ def download_video(video_id: UUID):
         headers=headers
     )
 
-
+# API to view videos
 @router.get("/videos/{video_id}/view")
 def view_video(video_id: UUID, request: Request):
     """
@@ -370,7 +373,6 @@ def view_video(video_id: UUID, request: Request):
         rng = _parse_range_header(range_header, total)
         if rng:
             start, end = rng
-            # Note: end is inclusive per Content-Range semantics
             chunk = blob[start:end + 1]
             headers = {
                 "Content-Range": f"bytes {start}-{end}/{total}",
