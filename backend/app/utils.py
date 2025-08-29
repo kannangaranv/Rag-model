@@ -32,15 +32,40 @@ def create_chunks_from_text(text, chunk_size=500, overlap=50):
     return chunks
 
 # Create document objects from text chunks
-def create_documents_from_chunks(chunks):
+def create_documents_from_chunks(chunks, doc_id):
     documents = []
     for chunk in chunks:
         document = Document(
             page_content=chunk,
+            metadata={"doc_id": doc_id}
         )
         documents.append(document)
     uuids = [str(uuid4()) for _ in range(len(documents))]
     return documents, uuids
+
+# Delete documents from the vector store
+def delete_documents_from_vector_store(doc_id):
+    try:
+        global vector_db
+        if vector_db is None:
+            print("Vector store is not loaded.")
+            return
+        all_docs = vector_db.docstore._dict
+        print(all_docs)
+        del_list=[]
+        for key,doc in all_docs.items():
+            if doc.metadata["doc_id"]==doc_id:
+                del_list.append(key)
+
+        if del_list:
+            vector_db.delete(ids=del_list)
+            vector_db.save_local("vector_store")
+            load_vector_store()
+            print(f"Deleted {len(del_list)} documents associated with {doc_id} from the vector store.")
+        else:
+            print(f"No documents found for {doc_id} in the vector store.")
+    except Exception as e:
+        print(f"Error deleting documents from vector store: {e}")
 
 # Upload documents to the vector store
 def upload_documents_to_vector_store(documents, uuids):

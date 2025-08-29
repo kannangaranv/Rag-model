@@ -32,10 +32,13 @@ from app.utils import (
     create_chunks_from_text,
     create_documents_from_chunks,
     upload_documents_to_vector_store,
-    invoke_and_save
+    invoke_and_save,
+    delete_documents_from_vector_store
 )
 from app.video_utils import get_transcription_from_video
 from app.file_utils import _parse_range_header
+from starlette import status
+from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter()
 
@@ -78,7 +81,7 @@ async def upload_documents(file: UploadFile = File(...)):
             )
             db.commit()
         chunks = create_chunks_from_text(md_text)
-        documents, uuids = create_documents_from_chunks(chunks)
+        documents, uuids = create_documents_from_chunks(chunks, doc_id)
         upload_documents_to_vector_store(documents, uuids)
 
         return {
@@ -140,7 +143,7 @@ async def upload_videos(file: UploadFile = File(...)):
             db.commit()
 
         chunks = create_chunks_from_text(transcription)
-        documents, uuids = create_documents_from_chunks(chunks)
+        documents, uuids = create_documents_from_chunks(chunks, doc_id=video_id)
         upload_documents_to_vector_store(documents, uuids)
 
         return {
@@ -272,6 +275,47 @@ def view_document(doc_id: UUID, request: Request):
     }
     return Response(content=blob, media_type=content_type, headers=headers)
 
+@router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(doc_id: str):
+    doc_id = (doc_id or "").strip()
+    try:
+        uid = UUID(doc_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid document id")
+
+    with SessionLocal() as db:
+        try:
+            exists = db.execute(
+                text("SELECT 1 FROM dbo.Documents WHERE Id = :id"),
+                {"id": str(uid)},
+            ).scalar()
+        except SQLAlchemyError:
+            raise HTTPException(status_code=500, detail="Database error while checking document")
+
+        if not exists:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+    try:
+       delete_documents_from_vector_store(doc_id)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete from vector store")
+
+    with SessionLocal() as db:
+        try:
+            result = db.execute(
+                text("DELETE FROM dbo.Documents WHERE Id = :id"),
+                {"id": str(uid)},
+            )
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Database error while deleting document")
+
+        if getattr(result, "rowcount", 0) == 0:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 # API to list videos
 @router.get("/videos", response_model=VideoListResponse)
 def list_videos(
@@ -392,4 +436,44 @@ def view_video(video_id: UUID, request: Request):
     }
     return Response(content=blob, media_type=content_type, headers=headers)
 
+@router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_video(video_id: str):
+    video_id = (video_id or "").strip()
+    try:
+        uid = UUID(video_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid video id")
+
+    with SessionLocal() as db:
+        try:
+            exists = db.execute(
+                text("SELECT 1 FROM dbo.Videos WHERE Id = :id"),
+                {"id": str(uid)},
+            ).scalar()
+        except SQLAlchemyError:
+            raise HTTPException(status_code=500, detail="Database error while checking video")
+
+        if not exists:
+            raise HTTPException(status_code=404, detail="Video not found")
+
+    try:
+       delete_documents_from_vector_store(video_id)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete from vector store")
+
+    with SessionLocal() as db:
+        try:
+            result = db.execute(
+                text("DELETE FROM dbo.Videos WHERE Id = :id"),
+                {"id": str(uid)},
+            )
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Database error while deleting video")
+
+        if getattr(result, "rowcount", 0) == 0:
+            raise HTTPException(status_code=404, detail="Video not found")
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
     
