@@ -157,6 +157,22 @@ export class UploadComponent implements OnInit {
     window.open(this.api.docDownloadUrl(doc.id), '_blank');
   }
 
+  deleteDoc(doc: DocumentMeta) {
+    if (this.pdfUploading) return;
+    if (!confirm(`Delete document "${doc.file_name}"? This action cannot be undone.`)) return;
+    this.pdfUploading = true;
+    this.api.docDeleteUrl(doc.id).subscribe({
+      next: () => {
+        this.pdfUploading = false;
+        this.loadDocuments(this.pageDocs);
+      },
+      error: () => {
+        this.pdfUploading = false;
+        alert('Failed to delete document. Please try again.');
+      }
+    });
+  }
+
   onVideoFileSelected(evt: Event) {
     const input = evt.target as HTMLInputElement;
     const picked = input.files?.[0] || null;
@@ -271,6 +287,18 @@ export class UploadComponent implements OnInit {
   }
   downloadVideo(v: VideoMeta) {
     window.open(this.api.videoDownloadUrl(v.id), '_blank');
+  }
+
+  deleteVideo(v: VideoMeta) {
+    if (!confirm(`Delete video "${v.file_name}"? This action cannot be undone.`)) return;
+    this.api.videoDeleteUrl(v.id).subscribe({
+      next: () => {
+        this.loadVideos(this.pageVideos);
+      },
+      error: () => {
+        alert('Failed to delete video. Please try again.');
+      }
+    });
   }
 
   formatSize(bytes: number) {

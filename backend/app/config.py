@@ -1,14 +1,15 @@
 import faiss
+import os
+import urllib
 from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-import urllib
 
+# Load environment variables
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERVER   = os.getenv("SQL_SERVER", "NUWANK-BP") 
@@ -17,10 +18,14 @@ USER     = os.getenv("SQL_USER", "sa1")
 PASSWORD = os.getenv("SQL_PASSWORD", "123")
 DRIVER   = os.getenv("SQL_DRIVER", "ODBC Driver 18 for SQL Server")
 
+# Initialize embeddings
 # embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 embeddings = OpenAIEmbeddings(model = "text-embedding-ada-002", api_key = OPENAI_API_KEY)
+
+# Initialize FAISS index
 index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
 
+# Initialize vector store
 vector_store = FAISS(
     embedding_function=embeddings,
     index=index,
@@ -28,6 +33,7 @@ vector_store = FAISS(
     index_to_docstore_id={},
 )
 
+# Initialize LLM
 llm = ChatOpenAI(
     model="gpt-4o",
     temperature=0,
@@ -37,6 +43,7 @@ llm = ChatOpenAI(
     api_key=OPENAI_API_KEY
 )
 
+# Initialize database connection
 conn_str = (
     f"DRIVER={{{DRIVER}}};"           
     f"SERVER={SERVER};"
@@ -46,7 +53,6 @@ conn_str = (
     "TrustServerCertificate=Yes"      
 )
 odbc_connect = urllib.parse.quote_plus(conn_str)
-
 engine = create_engine(f"mssql+pyodbc:///?odbc_connect={odbc_connect}", fast_executemany=True, echo=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()

@@ -86,6 +86,10 @@ export class OpenAiApiService {
       return `${this.apiUrl}/documents/${id}/download`;
     }
 
+  docDeleteUrl(id: string) {
+      return this.http.delete(`${this.apiUrl}/documents/${id}`);
+    }
+
   uploadVideoWithProgress(file: File): Observable<HttpEvent<any>> {
     const form = new FormData();
     form.append('file', file);
@@ -107,5 +111,9 @@ export class OpenAiApiService {
   videoDownloadUrl(id: string) {
     return `${this.apiUrl}/videos/${id}/download`;
   }
+
+  videoDeleteUrl(id: string) {
+    return this.http.delete(`${this.apiUrl}/videos/${id}`);
+  } 
 
 }
