@@ -51,7 +51,6 @@ def delete_documents_from_vector_store(doc_id):
             print("Vector store is not loaded.")
             return
         all_docs = vector_db.docstore._dict
-        print(all_docs)
         del_list=[]
         for key,doc in all_docs.items():
             if doc.metadata["doc_id"]==doc_id:

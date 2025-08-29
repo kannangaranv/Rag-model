@@ -296,7 +296,8 @@ def delete_document(doc_id: str):
             raise HTTPException(status_code=404, detail="Document not found")
 
     try:
-       delete_documents_from_vector_store(doc_id)
+        print("Deleting document from vector store:", doc_id)
+        delete_documents_from_vector_store(doc_id)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from vector store")
 
@@ -457,6 +458,7 @@ def delete_video(video_id: str):
             raise HTTPException(status_code=404, detail="Video not found")
 
     try:
+       print("Deleting video from vector store:", video_id)
        delete_documents_from_vector_store(video_id)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from vector store")
