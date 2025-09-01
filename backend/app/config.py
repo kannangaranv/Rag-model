@@ -6,7 +6,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Load environment variables
@@ -43,16 +43,35 @@ llm = ChatOpenAI(
     api_key=OPENAI_API_KEY
 )
 
+def make_conn_str(database: str) -> str:
+    conn_str = (
+        f"DRIVER={{{DRIVER}}};"
+        f"SERVER={SERVER};"
+        f"DATABASE={database};"
+        f"UID={USER};PWD={PASSWORD};"
+        "Encrypt=Yes;"
+        "TrustServerCertificate=Yes;"
+    )
+    return urllib.parse.quote_plus(conn_str)
+
+def ensure_database(db_name: str):
+    master_odbc = make_conn_str("master")
+    master_engine = create_engine(
+        f"mssql+pyodbc:///?odbc_connect={master_odbc}",
+        echo=False,
+        fast_executemany=True,
+    )
+
+    with master_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        exists = conn.execute(
+            text("SELECT 1 FROM sys.databases WHERE name = :name"),
+            {"name": db_name},
+        ).scalar()
+        if not exists:
+            conn.execute(text(f"CREATE DATABASE [{db_name}]"))
+
 # Initialize database connection
-conn_str = (
-    f"DRIVER={{{DRIVER}}};"           
-    f"SERVER={SERVER};"
-    f"DATABASE={DATABASE};"
-    f"UID={USER};PWD={PASSWORD};"
-    "Encrypt=Yes;"                    
-    "TrustServerCertificate=Yes"      
-)
-odbc_connect = urllib.parse.quote_plus(conn_str)
+odbc_connect = make_conn_str(DATABASE)
 engine = create_engine(f"mssql+pyodbc:///?odbc_connect={odbc_connect}", fast_executemany=True, echo=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()

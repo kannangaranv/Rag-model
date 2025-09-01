@@ -13,6 +13,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, trim
 from langchain_core.messages.utils import count_tokens_approximately
 
 
+
 # Dependency generator for database sessions
 def get_db():
     db = SessionLocal()

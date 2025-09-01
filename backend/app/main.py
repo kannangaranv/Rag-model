@@ -3,12 +3,19 @@ from app.routes import router as api_router
 from app.utils import load_vector_store
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import Base, engine
+from app.config import Base, engine, ensure_database
 from app import models   
+from dotenv import load_dotenv
+import os
+
+load_dotenv()   
+
+DATABASE = os.getenv("SQL_DATABASE", "KnowledgeBase")
 
 # Create the database tables and load the vector store
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_database(DATABASE)
     load_vector_store()
     Base.metadata.create_all(bind=engine)
     yield
