@@ -1,6 +1,6 @@
 # FastAPI Project Setup
 
-## 1 Install & Link FFmpeg (Windows)
+## 1. Install & Link FFmpeg (Windows)
 
 1. **Download FFmpeg**
    - Go to: [gyan.dev FFmpeg builds](https://www.gyan.dev/ffmpeg/builds/)
@@ -17,51 +17,11 @@
 3. **Verify the installation**
    ```cmd
    ffmpeg -version
+   
+## 2 Add the `.env` file
 
-## 2. Create Databases and tables
-
-Create a database with name ```KnowledgeBase```.
-```bash
-CREATE DATABASE [KnowledgeBase];
-GO
-```
-Run following sql codes on sql server to create the table.
-```bash
-USE [KnowledgeBase];
-GO
-
-IF OBJECT_ID('dbo.Documents', 'U') IS NULL
-BEGIN
-  CREATE TABLE dbo.Documents (
-      Id            UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() PRIMARY KEY,
-      FileName      NVARCHAR(255)    NOT NULL,
-      ContentType   NVARCHAR(100)    NOT NULL,
-      FileSizeBytes INT              NOT NULL,
-      Content       VARBINARY(MAX)   NOT NULL,
-      MdText        NVARCHAR(MAX)    NULL,        -- optional: store extracted markdown too
-      UploadedAt    DATETIME2 (7)    NOT NULL DEFAULT SYSUTCDATETIME()
-  );
-END
-GO
-```
-```bash
-USE [KnowledgeBase];
-GO
-
-IF OBJECT_ID('dbo.Videos', 'U') IS NULL
-BEGIN
-  CREATE TABLE dbo.Videos (
-      Id            UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() PRIMARY KEY,
-      FileName      NVARCHAR(255)    NOT NULL,
-      ContentType   NVARCHAR(100)    NOT NULL,
-      FileSizeBytes INT              NOT NULL,
-      Content       VARBINARY(MAX)   NOT NULL,
-      Transcript    NVARCHAR(MAX)    NULL,        -- optional: store extracted markdown too
-      UploadedAt    DATETIME2 (7)    NOT NULL DEFAULT SYSUTCDATETIME()
-  );
-END
-GO
-```
+1. Rename `.env.template` to `.env`.
+2. Open `.env` and fill in values for each environment variable.
 
 ## 3. Create Virtual Environment (Command Prompt)
 ```cmd
