@@ -19,8 +19,8 @@ PASSWORD = os.getenv("SQL_PASSWORD", "123")
 DRIVER   = os.getenv("SQL_DRIVER", "ODBC Driver 18 for SQL Server")
 
 # Initialize embeddings
-# embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-embeddings = OpenAIEmbeddings(model = "text-embedding-ada-002", api_key = OPENAI_API_KEY)
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# embeddings = OpenAIEmbeddings(model = "text-embedding-ada-002", api_key = OPENAI_API_KEY)
 
 # Initialize FAISS index
 index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
@@ -71,7 +71,8 @@ def ensure_database(db_name: str):
             conn.execute(text(f"CREATE DATABASE [{db_name}]"))
 
 # Initialize database connection
-odbc_connect = make_conn_str(DATABASE)
+conn_str = make_conn_str(DATABASE)
+odbc_connect = urllib.parse.quote_plus(conn_str)
 engine = create_engine(f"mssql+pyodbc:///?odbc_connect={odbc_connect}", fast_executemany=True, echo=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()

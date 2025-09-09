@@ -68,16 +68,19 @@ def delete_documents_from_vector_store(doc_id):
 
 # Upload documents to the vector store
 def upload_documents_to_vector_store(documents, uuids):
-    global vector_db
-    if (VECTOR_DIR / "index.faiss").exists() and (VECTOR_DIR / "index.pkl").exists():
-        vector_db.add_documents(documents=documents, ids=uuids)
-        vector_db.save_local("vector_store")
-        load_vector_store()
-    else:
-        vector_store.add_documents(documents=documents, ids=uuids)
-        vector_store.save_local("vector_store")
-        load_vector_store()
-    print("Documents uploaded to vector store successfully.")
+    try:
+        global vector_db
+        if (VECTOR_DIR / "index.faiss").exists() and (VECTOR_DIR / "index.pkl").exists():
+            vector_db.add_documents(documents=documents, ids=uuids)
+            vector_db.save_local("vector_store")
+            load_vector_store()
+        else:
+            vector_store.add_documents(documents=documents, ids=uuids)
+            vector_store.save_local("vector_store")
+            load_vector_store()
+        print("Documents uploaded to vector store successfully.")
+    except Exception as e:
+        print(f"Error uploading documents to vector store: {e}")
 
 # Create the RAG chain
 def create_rag_chain():

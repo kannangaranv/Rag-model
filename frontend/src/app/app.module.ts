@@ -8,7 +8,8 @@ import { FormsModule } from '@angular/forms';
 import { UploadComponent } from './upload/upload.component';
 import { LayoutComponent } from './layout/layout.component';
 import { RouterModule, Routes } from '@angular/router';
-
+import { ChatWidgetComponent } from './chat-widget/chat-widget.component';
+import { ChatWidgetModule } from './chat-widget/chat-widget.module';
 const routes: Routes = [
   {
     path: '',
@@ -33,7 +34,8 @@ const routes: Routes = [
     RouterModule.forRoot(routes),
     BrowserModule,
     HttpClientModule,
-    FormsModule
+    FormsModule,
+    ChatWidgetModule
   ],
   exports: [RouterModule],
   providers: [],
