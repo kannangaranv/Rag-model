@@ -1,0 +1,103 @@
+.chat-widget-root, .chat-widget-root * {
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* ===== Launcher ===== */
+.assistant-launcher {
+  position: fixed;
+  right: 20px; bottom: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px;
+  border-radius: 999px; border: 0; cursor: pointer;
+  background: #2563eb; color: #fff;
+  box-shadow: 0 12px 30px rgba(0,0,0,.18);
+}
+.assistant-launcher:hover { background: #1d4ed8; }
+
+/* ===== Docked Chat Panel ===== */
+.assistant-panel.docked {
+  position: fixed;
+  right: 20px; bottom: 60px;
+  width: 360px; height: 500px;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 20px 40px rgba(0,0,0,.25);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  z-index: 2147483646;
+}
+
+/* ===== Header ===== */
+.panel-header {
+  height: 48px;
+  background: #b9bcbe;
+  color: #0a0a0a;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px;
+  font-weight: 700;
+}
+.panel-header h3 { margin: 0; font-size: 16px; }
+.close-btn { border: 0; background: transparent; cursor: pointer; font-size: 18px; }
+
+/* ===== Messages ===== */
+.messages {
+  padding: 16px;
+  overflow-y: auto;
+  background: #fff;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.bubble {
+  max-width: 85%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14px; line-height: 1.45;
+  color: #0f172a;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  word-break: break-word;
+}
+.bubble.user {
+  align-self: flex-end;
+  background: #e6f0ff;
+  border-color: #dbe7ff;
+}
+.bubble [class] { all: initial; * { all: unset; } } /* prevents site CSS messing up API HTML */
+
+/* ===== Composer ===== */
+.panel-composer {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border-top: 1px solid #eef2f7;
+}
+.panel-composer textarea {
+  resize: none; height: 42px;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  background: #e6e2e2;
+  color: #222;
+  padding: 10px 14px;
+  outline: none;
+}
+.panel-composer textarea:focus {
+  border-color: #bbb;
+  background: #ece9e9;
+}
+.send-btn {
+  height: 42px; min-width: 70px;
+  padding: 0 16px;
+  border-radius: 12px; border: 0;
+  background: #9b9b9b; color: #fff;
+  cursor: pointer;
+}
+.send-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+  .assistant-panel.docked {
+    right: 10px; bottom: 80px;
+    width: 95vw; height: 75vh;
+  }
+}
