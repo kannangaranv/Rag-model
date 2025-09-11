@@ -4,7 +4,8 @@ from fastapi import (
     APIRouter,
     HTTPException, 
     UploadFile,
-    File
+    File,
+    Depends
 )
 import tempfile
 import shutil
@@ -17,7 +18,8 @@ from app.schemas import (
     DocumentListResponse,
     QueryRequest,
     VideoListResponse,
-    VideoMeta
+    VideoMeta,
+    UserLevelRequest,
 )
 from fastapi import Query
 from uuid import UUID
@@ -39,14 +41,31 @@ from app.video_utils import get_transcription_from_video
 from app.file_utils import _parse_range_header
 from starlette import status
 from sqlalchemy.exc import SQLAlchemyError
+from app.security import get_current_user, require_upload_permission
 
-router = APIRouter()
+
+router = APIRouter(dependencies=[Depends(get_current_user)])
+
+# API to query documents and get responses from llm.
+@router.post("/query/{level}")
+async def query_documents(level: int, payload: QueryRequest):
+    if level < 1 or level > 6:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
+    if not payload.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    try:
+        response = invoke_and_save("123", payload.query, level)
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Upload pdf to vector store and sql server
-@router.post("/upload-documents")
-async def upload_documents(file: UploadFile = File(...)):
+@router.post("/upload-documents/{level}")
+async def upload_documents(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+    if level < 1 or level > 6:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
     
     temp_path = None
     try:
@@ -65,10 +84,10 @@ async def upload_documents(file: UploadFile = File(...)):
             db.execute(
                 text("""
                     INSERT INTO dbo.Documents
-                        (Id, FileName, ContentType, FileSizeBytes, Content, MdText)
+                        (Id, FileName, ContentType, FileSizeBytes, Content, MdText, Level)
                     VALUES
                         (CONVERT(uniqueidentifier, :Id),
-                         :FileName, :ContentType, :FileSizeBytes, :Content, :MdText)
+                         :FileName, :ContentType, :FileSizeBytes, :Content, :MdText, :Level)
                 """),
                 {
                     "Id": doc_id,
@@ -77,11 +96,12 @@ async def upload_documents(file: UploadFile = File(...)):
                     "FileSizeBytes": file_size,
                     "Content": pdf_bytes,
                     "MdText": md_text,
+                    "Level": level,
                 }
             )
             db.commit()
         chunks = create_chunks_from_text(md_text)
-        documents, uuids = create_documents_from_chunks(chunks, doc_id)
+        documents, uuids = create_documents_from_chunks(chunks, doc_id, level)
         upload_documents_to_vector_store(documents, uuids)
 
         return {
@@ -97,11 +117,13 @@ async def upload_documents(file: UploadFile = File(...)):
             temp_path.unlink(missing_ok=True)
 
 # Upload video to vector store and sql server
-@router.post("/upload-videos")
-async def upload_videos(file: UploadFile = File(...)):
+@router.post("/upload-videos/{level}")
+async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     allowed = {"video/mp4", "video/x-m4v", "video/mpeg", "video/quicktime"}
     if file.content_type not in allowed:
         raise HTTPException(400, detail=f"Unsupported content type: {file.content_type}")
+    if level < 1 or level > 6:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
 
     suffix = Path(file.filename or "").suffix.lower() or ".mp4"
     fd, tmp_name = tempfile.mkstemp(suffix=suffix)
@@ -126,10 +148,10 @@ async def upload_videos(file: UploadFile = File(...)):
             db.execute(
                 text("""
                     INSERT INTO dbo.Videos
-                        (Id, FileName, ContentType, FileSizeBytes, Content, Transcript)
+                        (Id, FileName, ContentType, FileSizeBytes, Content, Transcript, Level)
                     VALUES
                         (CONVERT(uniqueidentifier, :Id),
-                         :FileName, :ContentType, :FileSizeBytes, :Content, :Transcript)
+                         :FileName, :ContentType, :FileSizeBytes, :Content, :Transcript, :Level)
                 """),
                 {
                     "Id": video_id,
@@ -138,12 +160,13 @@ async def upload_videos(file: UploadFile = File(...)):
                     "FileSizeBytes": file_size,
                     "Content": video_bytes,
                     "Transcript": transcription,
+                    "Level": level,
                 }
             )
             db.commit()
 
         chunks = create_chunks_from_text(transcription)
-        documents, uuids = create_documents_from_chunks(chunks, doc_id=video_id)
+        documents, uuids = create_documents_from_chunks(chunks, video_id, level)
         upload_documents_to_vector_store(documents, uuids)
 
         return {
@@ -158,20 +181,9 @@ async def upload_videos(file: UploadFile = File(...)):
             temp_path.unlink(missing_ok=True)
 
 
-# API to query documents and get responses from llm.
-@router.post("/query")
-async def query_documents(payload: QueryRequest):
-    if not payload.query.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty.")
-    try:
-        response = invoke_and_save("123", payload.query)
-        return {"response": response}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 # API to list documents
 @router.get("/documents", response_model=DocumentListResponse)
-def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200)):
+def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200), _: str = Depends(require_upload_permission())):
     offset = (page - 1) * page_size
     with SessionLocal() as db:
         total = db.execute(text("SELECT COUNT(*) AS cnt FROM dbo.Documents")).scalar_one()
@@ -184,7 +196,8 @@ def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, 
                     ContentType,
                     FileSizeBytes,
                     UploadedAt,
-                    CASE WHEN MdText IS NULL THEN 0 ELSE 1 END AS HasMd
+                    CASE WHEN MdText IS NULL THEN 0 ELSE 1 END AS HasMd,
+                    Level
                 FROM dbo.Documents
                 ORDER BY UploadedAt DESC
                 OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
@@ -200,6 +213,7 @@ def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, 
             file_size_bytes=row.FileSizeBytes,
             uploaded_at=row.UploadedAt,
             has_md_text=bool(row.HasMd),
+            level=getattr(row, 'Level', None),
         )
         for row in rows
     ]
@@ -276,7 +290,7 @@ def view_document(doc_id: UUID, request: Request):
     return Response(content=blob, media_type=content_type, headers=headers)
 
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_document(doc_id: str):
+def delete_document(doc_id: str, _: str = Depends(require_upload_permission())):
     doc_id = (doc_id or "").strip()
     try:
         uid = UUID(doc_id)
@@ -337,7 +351,8 @@ def list_videos(
                     FileName,
                     ContentType,
                     FileSizeBytes,
-                    UploadedAt
+                    UploadedAt,
+                    Level
                 FROM dbo.Videos
                 ORDER BY UploadedAt DESC
                 OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
@@ -352,6 +367,7 @@ def list_videos(
             content_type=row.ContentType,
             file_size_bytes=row.FileSizeBytes,
             uploaded_at=row.UploadedAt,
+            level=getattr(row, 'Level', None),
         )
         for row in rows
     ]
@@ -360,7 +376,7 @@ def list_videos(
 
 # API to download videos
 @router.get("/videos/{video_id}/download")
-def download_video(video_id: UUID):
+def download_video(video_id: UUID, _: str = Depends(require_upload_permission())):
     """
     Download the full video as an attachment.
     """
@@ -389,7 +405,7 @@ def download_video(video_id: UUID):
 
 # API to view videos
 @router.get("/videos/{video_id}/view")
-def view_video(video_id: UUID, request: Request):
+def view_video(video_id: UUID, request: Request, _: str = Depends(require_upload_permission())):
     """
     Inline video view with HTTP Range support for efficient streaming/seeking.
     """
@@ -438,7 +454,7 @@ def view_video(video_id: UUID, request: Request):
     return Response(content=blob, media_type=content_type, headers=headers)
 
 @router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_video(video_id: str):
+def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
     video_id = (video_id or "").strip()
     try:
         uid = UUID(video_id)
