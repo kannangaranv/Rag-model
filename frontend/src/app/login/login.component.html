@@ -1,0 +1,19 @@
+<div class="login-container">
+  <div class="card">
+    <h2>Sign in</h2>
+    <form (ngSubmit)="submit()">
+      <label>
+        <span>Username</span>
+        <input type="text" [(ngModel)]="username" name="username" autocomplete="username" />
+      </label>
+      <label>
+        <span>Password</span>
+        <input type="password" [(ngModel)]="password" name="password" autocomplete="current-password" />
+      </label>
+      <button type="submit" [disabled]="loading">{{ loading ? 'Signing in…' : 'Sign in' }}</button>
+      <div class="error" *ngIf="error">{{ error }}</div>
+    </form>
+  </div>
+  <p class="hint">Don’t have an account? Ask an admin to register you.</p>
+</div>
+

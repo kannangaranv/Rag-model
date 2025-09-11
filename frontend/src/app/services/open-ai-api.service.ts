@@ -12,6 +12,7 @@ export interface DocumentMeta {
   uploaded_at: string;          
   has_md_text?: boolean;       
   in_vector_store?: boolean;   
+  level?: number;
 }
 
 export interface DocumentListResponse {
@@ -30,6 +31,7 @@ export interface VideoMeta {
   // optional fields if backend provides:
   duration_seconds?: number;
   thumbnail_url?: string;
+  level?: number;
 }
 
 export interface VideoListResponse {
@@ -48,24 +50,24 @@ export class OpenAiApiService {
 
   constructor(private http: HttpClient) { }
 
-  public sendMessage(message: string) {
-    return this.http.post<any>(`${this.apiUrl}/query`, { query: message });
+  public sendMessage(message: string, level: number) {
+    return this.http.post<any>(`${this.apiUrl}/query/${level}`, { query: message });
   }
 
-  uploadDocument(file: File) {
+  uploadDocument(file: File, level: number) {
       const form = new FormData();
       form.append('file', file);            
       return this.http.post<{ message: string }>(
-        `${this.apiUrl}/upload-documents`,
+        `${this.apiUrl}/upload-documents/${level}`,
         form
       );
     }
 
-  uploadDocumentWithProgress(file: File) {
+  uploadDocumentWithProgress(file: File, level: number) {
     const form = new FormData();
     form.append('file', file);
     return this.http.post<{ message: string }>(
-      `${this.apiUrl}/upload-documents`,
+      `${this.apiUrl}/upload-documents/${level}`,
       form,
       { observe: 'events', reportProgress: true }
     );
@@ -90,10 +92,10 @@ export class OpenAiApiService {
       return this.http.delete(`${this.apiUrl}/documents/${id}`);
     }
 
-  uploadVideoWithProgress(file: File): Observable<HttpEvent<any>> {
+  uploadVideoWithProgress(file: File, level: number): Observable<HttpEvent<any>> {
     const form = new FormData();
     form.append('file', file);
-    return this.http.post<any>(`${this.apiUrl}/upload-videos`, form, {
+    return this.http.post<any>(`${this.apiUrl}/upload-videos/${level}`, form, {
       reportProgress: true,
       observe: 'events',
     });

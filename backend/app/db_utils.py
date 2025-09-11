@@ -62,6 +62,8 @@ def load_session_history(
               .all()
         )
 
+        print(f"Loaded {len(rows)} messages for session_id={session_id}")
+
         msgs = []
         for m in rows:
             role = (m.role or "").lower()

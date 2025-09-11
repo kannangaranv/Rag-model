@@ -1,0 +1,7 @@
+.users-page { background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+.header { display:flex; align-items:center; justify-content: space-between; margin-bottom: 12px; }
+.btn { text-decoration:none; color:#fff; background:#1662dd; padding:8px 12px; border-radius:6px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align:left; padding:8px 10px; border-bottom:1px solid #eee; }
+.error { color:#b00020; }
+

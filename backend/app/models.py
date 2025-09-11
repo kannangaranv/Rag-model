@@ -15,6 +15,7 @@ class Document(Base):
     FileSizeBytes = Column(Integer,         nullable=False)
     Content       = Column(LargeBinary,     nullable=False)
     MdText        = Column(NVARCHAR(None))  
+    Level         = Column(Integer,         nullable=True)
     UploadedAt    = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
 
 class Video(Base):
@@ -25,6 +26,7 @@ class Video(Base):
     FileSizeBytes = Column(Integer,         nullable=False)
     Content       = Column(LargeBinary,     nullable=False)
     Transcript    = Column(NVARCHAR(None))  
+    Level         = Column(Integer,         nullable=True)
     UploadedAt    = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
 
 class Session(Base):
@@ -42,3 +44,10 @@ class Message(Base):
     content = Column(Text, nullable=False)
     session = relationship("Session", back_populates="messages")
 
+class User(Base):
+    __tablename__ = "Users"
+    Id = Column(Integer, primary_key=True, autoincrement=True)
+    Username = Column(NVARCHAR(100), unique=True, nullable=False, index=True)
+    HashedPassword = Column(NVARCHAR(255), nullable=False)
+    Level = Column(Integer, nullable=False, default=1)
+    CreatedAt = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())

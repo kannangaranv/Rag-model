@@ -1,0 +1,26 @@
+<div class="user-create">
+  <h2>Create User</h2>
+  <form (ngSubmit)="submit()">
+    <label>
+      <span>Username</span>
+      <input name="username" [(ngModel)]="username" />
+    </label>
+    <label>
+      <span>Password</span>
+      <input type="password" name="password" [(ngModel)]="password" />
+    </label>
+    <label>
+      <span>Level</span>
+      <select name="level" [(ngModel)]="level">
+        <option [ngValue]="2">Board Admin (2)</option>
+        <option [ngValue]="3">Sys Admin (3)</option>
+        <option [ngValue]="4">Organizer (4)</option>
+        <option [ngValue]="5">Actionee (5)</option>
+        <option [ngValue]="6">Invittee (6)</option>
+      </select>
+    </label>
+    <button type="submit" [disabled]="saving">{{ saving ? 'Saving…' : 'Create' }}</button>
+    <div class="msg" *ngIf="message">{{ message }}</div>
+    <div class="error" *ngIf="error">{{ error }}</div>
+  </form>
+</div>

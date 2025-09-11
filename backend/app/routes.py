@@ -19,7 +19,6 @@ from app.schemas import (
     QueryRequest,
     VideoListResponse,
     VideoMeta,
-    UserLevelRequest,
 )
 from fastapi import Query
 from uuid import UUID
@@ -28,7 +27,6 @@ from fastapi.responses import StreamingResponse
 from fastapi import Request, Response
 from pathlib import Path
 import tempfile, os
-import time
 from app.pdf_utils import convert_pdf_to_markdown
 from app.utils import (
     create_chunks_from_text,
@@ -42,19 +40,21 @@ from app.file_utils import _parse_range_header
 from starlette import status
 from sqlalchemy.exc import SQLAlchemyError
 from app.security import get_current_user, require_upload_permission
+from app.models import User
 
-
-router = APIRouter(dependencies=[Depends(get_current_user)])
+# neglest 
+router = APIRouter()
 
 # API to query documents and get responses from llm.
 @router.post("/query/{level}")
-async def query_documents(level: int, payload: QueryRequest):
+async def query_documents(level: int, payload: QueryRequest, current_user: User = Depends(get_current_user)):
+    username = current_user.Username
     if level < 1 or level > 6:
         raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     try:
-        response = invoke_and_save("123", payload.query, level)
+        response = invoke_and_save(username, payload.query, level)
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -336,6 +336,7 @@ def delete_document(doc_id: str, _: str = Depends(require_upload_permission())):
 def list_videos(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
+    _: str = Depends(require_upload_permission())
 ):
     """
     Paginated list of videos stored in dbo.Videos.
@@ -376,7 +377,7 @@ def list_videos(
 
 # API to download videos
 @router.get("/videos/{video_id}/download")
-def download_video(video_id: UUID, _: str = Depends(require_upload_permission())):
+def download_video(video_id: UUID):
     """
     Download the full video as an attachment.
     """
@@ -405,7 +406,7 @@ def download_video(video_id: UUID, _: str = Depends(require_upload_permission())
 
 # API to view videos
 @router.get("/videos/{video_id}/view")
-def view_video(video_id: UUID, request: Request, _: str = Depends(require_upload_permission())):
+def view_video(video_id: UUID, request: Request):
     """
     Inline video view with HTTP Range support for efficient streaming/seeking.
     """

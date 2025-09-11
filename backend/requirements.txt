@@ -15,3 +15,5 @@ pyodbc
 moviepy==1.0.3
 pydub
 aiofiles
+python-jose[cryptography]
+passlib

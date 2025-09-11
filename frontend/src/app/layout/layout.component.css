@@ -13,7 +13,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center; /* centers brand name */
+  justify-content: center; /* center title, we will place user block absolutely */
   padding: 0 16px;
   height: 60px;
   border-bottom: 1px solid #07200f;
@@ -61,3 +61,10 @@
 }
 
 
+
+.userblock { position: absolute; right: 16px; display: flex; align-items: center; gap: 10px; color: #ffffff; }
+.username { color: #ffffff; font-weight: 600; }
+.btn-logout { display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:6px; background: transparent; border:1px solid rgba(255,255,255,0.35); color:#fff; cursor:pointer; }
+.btn-logout:hover { background: rgba(255,255,255,0.12); }
+.btn-logout .icon { display:block; }
+.flex-spacer { flex:1 1 auto; }

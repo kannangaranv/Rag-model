@@ -47,6 +47,12 @@
   </div>
 
   <div class="actions">
+    <label class="lvl">
+      <span>Related Level</span>
+      <select [(ngModel)]="docLevel">
+        <option *ngFor="let o of levelOptions" [ngValue]="o.value">{{ o.label }}</option>
+      </select>
+    </label>
     <button class="btn btn-primary" (click)="uploadPdf()" [disabled]="!pdfFile || pdfUploading">
       {{ pdfUploading ? 'Uploading…' : 'Upload PDF' }}
     </button>
@@ -77,6 +83,7 @@
         <tr>
           <th style="width: 36px;"></th>
           <th>File name</th>
+          <th>Level</th>
           <th>Size</th>
           <th>Uploaded</th>
           <th style="width: 160px;">Actions</th>
@@ -88,6 +95,7 @@
             <img src="assets/images/pdf.png" alt="PDF" class="row-icon" />
           </td>
           <td class="truncate" [title]="d.file_name">{{ d.file_name }}</td>
+          <td>{{ roleName(d.level) }}</td>
           <td>{{ formatSize(d.file_size_bytes) }}</td>
           <td>{{ d.uploaded_at | date:'medium' }}</td>
           <td class="actions-cell">
@@ -160,6 +168,12 @@
   </div>
 
   <div class="actions">
+    <label class="lvl">
+      <span>Related Level</span>
+      <select [(ngModel)]="videoLevel">
+        <option *ngFor="let o of levelOptions" [ngValue]="o.value">{{ o.label }}</option>
+      </select>
+    </label>
     <button class="btn btn-primary" (click)="uploadVideo()" [disabled]="!videoFile || videoUploading">
       {{ videoUploading ? 'Uploading…' : 'Upload Video' }}
     </button>
@@ -190,6 +204,7 @@
         <tr>
           <th style="width: 36px;"></th>
           <th>File name</th>
+          <th>Level</th>
           <th>Size</th>
           <th>Uploaded</th>
           <th style="width: 200px;">Actions</th>
@@ -201,6 +216,7 @@
             <img src="assets/images/video.png" alt="Video" class="row-icon" />
           </td>
           <td class="truncate" [title]="v.file_name">{{ v.file_name }}</td>
+          <td>{{ roleName(v.level) }}</td>
           <td>{{ formatSize(v.file_size_bytes) }}</td>
           <td>{{ v.uploaded_at | date:'medium' }}</td>
           <td class="actions-cell">

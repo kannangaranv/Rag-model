@@ -32,12 +32,12 @@ def create_chunks_from_text(text, chunk_size=500, overlap=50):
     return chunks
 
 # Create document objects from text chunks
-def create_documents_from_chunks(chunks, doc_id):
+def create_documents_from_chunks(chunks, doc_id, level: int | None = None):
     documents = []
     for chunk in chunks:
         document = Document(
             page_content=chunk,
-            metadata={"doc_id": doc_id}
+            metadata={"doc_id": doc_id, "user_level": level}
         )
         documents.append(document)
     uuids = [str(uuid4()) for _ in range(len(documents))]
@@ -83,12 +83,17 @@ def upload_documents_to_vector_store(documents, uuids):
         print(f"Error uploading documents to vector store: {e}")
 
 # Create the RAG chain
-def create_rag_chain():
+def create_rag_chain(level: int | None = None):
     global vector_db
     if vector_db is None:
         raise ValueError("Vector store is not loaded. Please upload documents first.")
 
-    retriever = vector_db.as_retriever()
+    # If a level is provided, filter retrieval to matching chunks
+    search_kwargs = {}
+    if level is not None:
+        search_kwargs["filter"] = {"user_level": level}
+    retriever = vector_db.as_retriever(search_kwargs=search_kwargs)
+    
 
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
     which might reference context in the chat history, formulate a standalone question \
@@ -143,10 +148,10 @@ Output Rules:
     return conversational_rag_chain
 
 # Invoke the RAG chain and save the messages
-def invoke_and_save(session_id, input_text):
-    
+def invoke_and_save(session_id, input_text, level: int | None = None):
+    # Level is accepted for future use (e.g., level-based retrieval/prompting)
     save_message(session_id, "human", input_text)
-    conversational_rag_chain = create_rag_chain()
+    conversational_rag_chain = create_rag_chain(level)
     result = conversational_rag_chain.invoke(
         {"input": input_text},
         config={"configurable": {"session_id": session_id}}

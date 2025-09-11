@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.routes import router as api_router
+from app.auth import router as auth_router
 from app.utils import load_vector_store
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,4 +35,5 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router, prefix="/api")
 app.include_router(api_router, prefix="/api")

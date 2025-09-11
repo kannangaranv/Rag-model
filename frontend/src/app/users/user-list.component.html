@@ -1,0 +1,27 @@
+<div class="users-page">
+  <div class="header">
+    <h2>Users</h2>
+    <a class="btn" routerLink="/users/create">+ Create</a>
+  </div>
+  <div *ngIf="loading">Loading…</div>
+  <div class="error" *ngIf="error">{{ error }}</div>
+  <table class="table" *ngIf="!loading && !error">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Role</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let u of users">
+        <td>{{ u.id }}</td>
+        <td>{{ u.username }}</td>
+        <td>{{ roleName(u.level) }}</td>
+        <td>{{ u.created_at | date:'short' }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
