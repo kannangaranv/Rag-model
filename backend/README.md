@@ -49,7 +49,6 @@ uvicorn app.main:app --reload --port 8000
 - Register: `POST /api/auth/register` with JSON `{ "username", "password" }`.
 - Current user: `GET /api/auth/me` with header `Authorization: Bearer <token>`.
 - User levels: numeric `level` on users (default 1). JWT includes `lvl` claim.
-- Update level (admin only, level>=2): `PATCH /api/auth/users/{user_id}/level?new_level=2`
 
 All existing `/api/*` endpoints (documents/videos/query) now require a valid Bearer token.
 

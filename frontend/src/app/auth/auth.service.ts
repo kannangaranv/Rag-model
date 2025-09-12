@@ -79,7 +79,7 @@ export class AuthService {
     const token = this.getToken();
     if (!token) return false;
     const payload = this.decodeJwt(token);
-    if (!payload?.exp) return true; // assume session if no exp
+    if (!payload?.exp) return true; 
     const now = Math.floor(Date.now() / 1000);
     return payload.exp > now;
   }

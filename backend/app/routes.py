@@ -1,5 +1,4 @@
 import os
-import json
 from fastapi import (
     APIRouter,
     HTTPException, 
@@ -17,8 +16,10 @@ from app.schemas import (
     DocumentMeta,
     DocumentListResponse,
     QueryRequest,
+    QueryResponse,
     VideoListResponse,
     VideoMeta,
+    UploadDocumentResponse,
 )
 from fastapi import Query
 from uuid import UUID
@@ -46,7 +47,7 @@ from app.models import User
 router = APIRouter()
 
 # API to query documents and get responses from llm.
-@router.post("/query/{level}")
+@router.post("/query/{level}", response_model=QueryResponse, status_code=status.HTTP_200_OK)
 async def query_documents(level: int, payload: QueryRequest, current_user: User = Depends(get_current_user)):
     username = current_user.Username
     if level < 1 or level > 6:
@@ -55,12 +56,12 @@ async def query_documents(level: int, payload: QueryRequest, current_user: User 
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     try:
         response = invoke_and_save(username, payload.query, level)
-        return {"response": response}
+        return QueryResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # Upload pdf to vector store and sql server
-@router.post("/upload-documents/{level}")
+@router.post("/upload-documents/{level}", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_documents(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
@@ -104,10 +105,10 @@ async def upload_documents(level: int, file: UploadFile = File(...), _: str = De
         documents, uuids = create_documents_from_chunks(chunks, doc_id, level)
         upload_documents_to_vector_store(documents, uuids)
 
-        return {
-            "message": "Document uploaded to vector store.",
-            "document_id": doc_id
-        }
+        return UploadDocumentResponse(
+            message="Document uploaded to vector store.",
+            document_id=doc_id
+        )
     except Exception as e:
         print(f"Error uploading document: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
@@ -117,7 +118,7 @@ async def upload_documents(level: int, file: UploadFile = File(...), _: str = De
             temp_path.unlink(missing_ok=True)
 
 # Upload video to vector store and sql server
-@router.post("/upload-videos/{level}")
+@router.post("/upload-videos/{level}", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     allowed = {"video/mp4", "video/x-m4v", "video/mpeg", "video/quicktime"}
     if file.content_type not in allowed:
@@ -169,11 +170,10 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
         documents, uuids = create_documents_from_chunks(chunks, video_id, level)
         upload_documents_to_vector_store(documents, uuids)
 
-        return {
-            "message": "Video uploaded to vector store.",
-            "video_id": video_id
-        }
-
+        return UploadDocumentResponse(
+            message="Video uploaded to vector store.",
+            document_id=video_id
+        )
     except Exception as e:
         raise HTTPException(500, detail=f"Upload failed: {e}")
     finally:
@@ -182,7 +182,7 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
 
 
 # API to list documents
-@router.get("/documents", response_model=DocumentListResponse)
+@router.get("/documents", response_model=DocumentListResponse, status_code=status.HTTP_200_OK)
 def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200), _: str = Depends(require_upload_permission())):
     offset = (page - 1) * page_size
     with SessionLocal() as db:
@@ -221,7 +221,7 @@ def list_documents(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, 
     return DocumentListResponse(items=items, total=total, page=page, page_size=page_size)
 
 # API to download documents
-@router.get("/documents/{doc_id}/download")
+@router.get("/documents/{doc_id}/download", status_code=status.HTTP_200_OK)
 def download_document(doc_id: UUID):
     with SessionLocal() as db:
         row = db.execute(
@@ -248,7 +248,7 @@ def download_document(doc_id: UUID):
     )
 
 # API to view documents
-@router.get("/documents/{doc_id}/view")
+@router.get("/documents/{doc_id}/view", status_code=status.HTTP_200_OK)
 def view_document(doc_id: UUID, request: Request):
     with SessionLocal() as db:
         row = db.execute(
@@ -332,7 +332,7 @@ def delete_document(doc_id: str, _: str = Depends(require_upload_permission())):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # API to list videos
-@router.get("/videos", response_model=VideoListResponse)
+@router.get("/videos", response_model=VideoListResponse, status_code=status.HTTP_200_OK)
 def list_videos(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
@@ -376,7 +376,7 @@ def list_videos(
     return VideoListResponse(items=items, total=total, page=page, page_size=page_size)
 
 # API to download videos
-@router.get("/videos/{video_id}/download")
+@router.get("/videos/{video_id}/download", status_code=status.HTTP_200_OK)
 def download_video(video_id: UUID):
     """
     Download the full video as an attachment.
@@ -405,7 +405,7 @@ def download_video(video_id: UUID):
     )
 
 # API to view videos
-@router.get("/videos/{video_id}/view")
+@router.get("/videos/{video_id}/view", status_code=status.HTTP_200_OK)
 def view_video(video_id: UUID, request: Request):
     """
     Inline video view with HTTP Range support for efficient streaming/seeking.

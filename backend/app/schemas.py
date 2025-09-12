@@ -6,9 +6,13 @@ from uuid import UUID
 class QueryRequest(BaseModel):
     query: str
 
-class UserLevelRequest(BaseModel):
-    user_level: int  # 1=Admin, 2=Board Admin, 3=Sys Admin, 4=Organizer, 5=Actionee, 6=Invittee
-    
+class QueryResponse(BaseModel):
+    response: str
+
+class UploadDocumentResponse(BaseModel):
+    message: str
+    document_id: str
+
 class DocumentMeta(BaseModel):
     id: UUID
     file_name: str
@@ -38,12 +42,10 @@ class VideoListResponse(BaseModel):
     page: int
     page_size: int
 
-# Auth schemas
 class UserCreate(BaseModel):
     username: str
     password: str
-    # Levels: 1=Admin, 2=Board Admin, 3=Sys Admin, 4=Organizer, 5=Actionee, 6=Invittee
-    level: int = 6  # 1..6
+    level: int = 1  # 1..6
 
 class UserOut(BaseModel):
     id: int
@@ -59,7 +61,6 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
-# Admin: list users
 class UserMeta(BaseModel):
     id: int
     username: str
