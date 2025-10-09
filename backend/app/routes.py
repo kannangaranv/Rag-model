@@ -32,12 +32,14 @@ from app.pdf_utils import convert_pdf_to_markdown
 from app.utils import (
     create_chunks_from_text,
     create_documents_from_chunks,
+    create_documents_from_vector_sentences,
     upload_documents_to_vector_store,
     invoke_and_save,
     delete_documents_from_vector_store
 )
 from app.video_utils import get_transcription_from_video
 from app.file_utils import _parse_range_header
+from app.user_role_utils import excel_to_vector_sentences
 from starlette import status
 from sqlalchemy.exc import SQLAlchemyError
 from app.security import get_current_user, require_upload_permission
@@ -179,6 +181,72 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
     finally:
         if temp_path:
             temp_path.unlink(missing_ok=True)
+
+@router.post("/upload-user-roles", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
+async def upload_user_roles(file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
+    if file.content_type not in ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",):
+        raise HTTPException(status_code=400, detail="Only .xlsx Excel files are accepted.")
+
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            temp_path = Path(tmp.name)
+            shutil.copyfileobj(file.file, tmp)
+    finally:
+        await file.close()
+
+    try:
+        doc_id = str(uuid4())
+        records = excel_to_vector_sentences(str(temp_path), doc_id=doc_id)
+        if not records:
+            raise HTTPException(status_code=400, detail="No valid data found in the Excel file.")
+        
+        with SessionLocal() as db:
+            db.execute(
+                text("""
+                    INSERT INTO dbo.UserRoleFiles
+                        (Id, FileName, ContentType, FileSizeBytes, Content)
+                    VALUES
+                        (CONVERT(uniqueidentifier, :Id),
+                         :FileName, :ContentType, :FileSizeBytes, :Content)
+                """),
+                {
+                    "Id": doc_id,
+                    "FileName": file.filename or "user_roles.xlsx",
+                    "ContentType": file.content_type,
+                    "FileSizeBytes": temp_path.stat().st_size,
+                    "Content": temp_path.read_bytes(),
+                }
+            )
+            db.commit()
+
+        documents, uuids = create_documents_from_vector_sentences(records)
+        upload_documents_to_vector_store(documents, uuids)
+
+        return UploadDocumentResponse(
+            message="User roles uploaded to vector store.",
+            document_id=doc_id
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error uploading user roles: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+
+    finally:
+        if temp_path:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except PermissionError:
+                import time
+                for _ in range(5):
+                    try:
+                        time.sleep(0.1)
+                        temp_path.unlink(missing_ok=True)
+                        break
+                    except PermissionError:
+                        continue
 
 
 # API to list documents
@@ -493,6 +561,48 @@ def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
 
         if getattr(result, "rowcount", 0) == 0:
             raise HTTPException(status_code=404, detail="Video not found")
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.delete("/user-roles/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user_role_file(file_id: str, _: str = Depends(require_upload_permission())):
+    file_id = (file_id or "").strip()
+    try:
+        uid = UUID(file_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid file id")
+
+    with SessionLocal() as db:
+        try:
+            exists = db.execute(
+                text("SELECT 1 FROM dbo.UserRoleFiles WHERE Id = :id"),
+                {"id": str(uid)},
+            ).scalar()
+        except SQLAlchemyError:
+            raise HTTPException(status_code=500, detail="Database error while checking user role file")
+
+        if not exists:
+            raise HTTPException(status_code=404, detail="User role file not found")
+
+    try:
+       print("Deleting user role file from vector store:", file_id)
+       delete_documents_from_vector_store(file_id)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete from vector store")
+
+    with SessionLocal() as db:
+        try:
+            result = db.execute(
+                text("DELETE FROM dbo.UserRoleFiles WHERE Id = :id"),
+                {"id": str(uid)},
+            )
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Database error while deleting user role file")
+
+        if getattr(result, "rowcount", 0) == 0:
+            raise HTTPException(status_code=404, detail="User role file not found")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
     

@@ -21,7 +21,7 @@ VECTOR_DIR = Path("vector_store")
 vector_db: Optional[FAISS] = None
 
 # Create text chunks from a larger text body
-def create_chunks_from_text(text, chunk_size=500, overlap=50):
+def create_chunks_from_text(text, chunk_size=100, overlap=10):
     words = text.split()
     chunks = []
     for i in range(0, len(words), chunk_size - overlap):
@@ -37,6 +37,20 @@ def create_documents_from_chunks(chunks, doc_id, level: int | None = None):
         document = Document(
             page_content=chunk,
             metadata={"doc_id": doc_id, "user_level": level}
+        )
+        documents.append(document)
+    uuids = [str(uuid4()) for _ in range(len(documents))]
+    return documents, uuids
+
+# Create document objects from vector sentences
+def create_documents_from_vector_sentences(sentences):
+    documents = []
+    for entry in sentences:
+        text = entry["text"]
+        metadata = entry["metadata"]
+        document = Document(
+            page_content=text,
+            metadata=metadata
         )
         documents.append(document)
     uuids = [str(uuid4()) for _ in range(len(documents))]
@@ -88,9 +102,11 @@ def create_rag_chain(level: int | None = None):
         raise ValueError("Vector store is not loaded. Please upload documents first.")
 
     # If a level is provided, filter retrieval to matching chunks
-    search_kwargs = {}
-    if level is not None:
-        search_kwargs["filter"] = {"user_level": level}
+    search_kwargs = {
+        "k": 20# Number of top documents to retrieve
+    }
+    # if level is not None:
+    #     search_kwargs["filter"] = {"user_level": level}
     retriever = vector_db.as_retriever(search_kwargs=search_kwargs)
     
     contextualize_q_system_prompt = """Given a chat history and the latest user question \

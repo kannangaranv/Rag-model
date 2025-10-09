@@ -95,3 +95,6 @@ typings/
 
 # image folder
 # images/
+
+*.xlsx
+*.xlsm

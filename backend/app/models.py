@@ -50,3 +50,12 @@ class User(Base):
     HashedPassword = Column(NVARCHAR(255), nullable=False)
     Level = Column(Integer, nullable=False, default=1)
     CreatedAt = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
+
+class UserRoleFile(Base):
+    __tablename__ = "UserRoleFiles"
+    Id = Column(UNIQUEIDENTIFIER, primary_key=True)
+    FileName = Column(NVARCHAR(255), nullable=False)
+    ContentType = Column(NVARCHAR(100), nullable=False)
+    FileSizeBytes = Column(Integer, nullable=False)
+    Content = Column(LargeBinary, nullable=False)
+    UploadedAt = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
