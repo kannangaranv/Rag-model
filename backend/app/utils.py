@@ -1,9 +1,8 @@
 from uuid import uuid4
 from pathlib import Path
 from langchain_core.documents import Document
-from typing import Optional, List
+from typing import Optional
 from langchain_community.vectorstores import FAISS
-from app.config import engine, Base
 from app.db_utils import load_session_history, save_message
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -22,7 +21,7 @@ VECTOR_DIR = Path("vector_store")
 vector_db: Optional[FAISS] = None
 
 # Create text chunks from a larger text body
-def create_chunks_from_text(text, chunk_size=500, overlap=50):
+def create_chunks_from_text(text, chunk_size=100, overlap=10):
     words = text.split()
     chunks = []
     for i in range(0, len(words), chunk_size - overlap):
@@ -32,12 +31,26 @@ def create_chunks_from_text(text, chunk_size=500, overlap=50):
     return chunks
 
 # Create document objects from text chunks
-def create_documents_from_chunks(chunks, doc_id):
+def create_documents_from_chunks(chunks, doc_id, level: int | None = None):
     documents = []
     for chunk in chunks:
         document = Document(
             page_content=chunk,
-            metadata={"doc_id": doc_id}
+            metadata={"doc_id": doc_id, "user_level": level}
+        )
+        documents.append(document)
+    uuids = [str(uuid4()) for _ in range(len(documents))]
+    return documents, uuids
+
+# Create document objects from vector sentences
+def create_documents_from_vector_sentences(sentences):
+    documents = []
+    for entry in sentences:
+        text = entry["text"]
+        metadata = entry["metadata"]
+        document = Document(
+            page_content=text,
+            metadata=metadata
         )
         documents.append(document)
     uuids = [str(uuid4()) for _ in range(len(documents))]
@@ -83,13 +96,19 @@ def upload_documents_to_vector_store(documents, uuids):
         print(f"Error uploading documents to vector store: {e}")
 
 # Create the RAG chain
-def create_rag_chain():
+def create_rag_chain(level: int | None = None):
     global vector_db
     if vector_db is None:
         raise ValueError("Vector store is not loaded. Please upload documents first.")
 
-    retriever = vector_db.as_retriever()
-
+    # If a level is provided, filter retrieval to matching chunks
+    search_kwargs = {
+        "k": 20# Number of top documents to retrieve
+    }
+    # if level is not None:
+    #     search_kwargs["filter"] = {"user_level": level}
+    retriever = vector_db.as_retriever(search_kwargs=search_kwargs)
+    
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
     which might reference context in the chat history, formulate a standalone question \
     which can be understood without the chat history. Do NOT answer the question, \
@@ -143,54 +162,26 @@ Output Rules:
     return conversational_rag_chain
 
 # Invoke the RAG chain and save the messages
-def invoke_and_save(session_id, input_text):
-    
+def invoke_and_save(session_id, input_text, level: int | None = None):
     save_message(session_id, "human", input_text)
-    conversational_rag_chain = create_rag_chain()
-    result = conversational_rag_chain.invoke(
+    conversational_rag_chain = create_rag_chain(level)
+
+    res = conversational_rag_chain.invoke(
         {"input": input_text},
         config={"configurable": {"session_id": session_id}}
-    )["answer"]
+    )
 
-    save_message(session_id, "ai", result)
-    return result
+    answer = res.get("answer")
+    docs = res.get("context", [])  
 
-# def get_similarity_context(query, k=6,):
-#     query_embedding = embeddings.embed_query(query)
-#     results = vector_db.similarity_search_with_score_by_vector(query_embedding, k=k)
-#     retrieved_docs = [doc.page_content for doc, _ in results]
-#     context = "\n\n".join(retrieved_docs)
-#     return retrieved_docs
+    for i, d in enumerate(docs, 1):
+        print(f"\n=== Retrieved #{i} ===")
+        print(f"METADATA: {d.metadata}")
+        print(f"CONTENT: {d.page_content}")
 
-# def get_llm_response(query, context):
-#     messages = [
-#         {
-#             "role": "system",
-#             "content": """You are a helpful assistant for the BoardPAC application, powered by GPT-4o and Retrieval-Augmented Generation (RAG). 
-# All relevant BoardPAC knowledge is stored in the knowledge base, and you should answer based only on the provided retrieved context.
+    save_message(session_id, "ai", answer)
+    return answer
 
-# Internally follow these steps:
-# 1. Summarize the user question in simpler words.
-# 2. Identify which retrieved text chunks from the provided context are directly relevant to the question.
-# 3. Combine those chunks into a clear outline.
-# 4. Draft a single, coherent, complete answer using only the relevant chunks.
-
-# Output Rules:
-# - **Only** return the final refined answer.
-# - **Always** format the answer as fully valid HTML — using headings (`<h2>`), paragraphs (`<p>`), ordered/unordered lists (`<ol>`/`<ul>`), list items (`<li>`), and bold (`<strong>`) where needed.
-# - **Do not** return Markdown or plain text or html as a string."""
-#         },
-#         {
-#             "role": "user",
-#             "content": f"""User Query:
-# {query}
-
-# Retrieved Context (Top Relevant Chunks):
-# {context}"""
-#         }
-#     ]
-#     response = llm.invoke(messages)
-#     return response.content
 
 # Load the vector store from disk
 def load_vector_store() -> None:

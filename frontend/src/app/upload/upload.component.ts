@@ -14,6 +14,16 @@ import {
   styleUrls: ['./upload.component.css'],
 })
 export class UploadComponent implements OnInit {
+  // Selected roles for tagging uploads
+  docLevel: number = 2;
+  videoLevel: number = 2;
+  levelOptions = [
+    { value: 2, label: 'Board Admin (2)' },
+    { value: 3, label: 'Sys Admin (3)' },
+    { value: 4, label: 'Organizer (4)' },
+    { value: 5, label: 'Actionee (5)' },
+    { value: 6, label: 'Invittee (6)' },
+  ];
   pdfFile: File | null = null;
   pdfUploading = false;
   pdfProgress = 0;
@@ -102,7 +112,7 @@ export class UploadComponent implements OnInit {
     this.pdfMessage = '';
     this.pdfError = '';
 
-    this.api.uploadDocumentWithProgress(this.pdfFile).subscribe({
+    this.api.uploadDocumentWithProgress(this.pdfFile, this.docLevel).subscribe({
       next: (event) => {
         if (event.type === HttpEventType.UploadProgress && event.total) {
           this.pdfProgress = Math.round((event.loaded / event.total) * 100);
@@ -234,7 +244,7 @@ export class UploadComponent implements OnInit {
     this.videoMessage = '';
     this.videoError = '';
 
-    this.api.uploadVideoWithProgress(this.videoFile).subscribe({
+    this.api.uploadVideoWithProgress(this.videoFile, this.videoLevel).subscribe({
       next: (event) => {
         if (event.type === HttpEventType.UploadProgress && event.total) {
           this.videoProgress = Math.round((event.loaded / event.total) * 100);
@@ -316,5 +326,17 @@ export class UploadComponent implements OnInit {
   get totalVideoPages(): number {
     if (!this.totalVideos || !this.pageSizeVideos) return 1;
     return Math.max(1, Math.ceil(this.totalVideos / this.pageSizeVideos));
+  }
+
+  roleName(level?: number): string {
+    switch (level) {
+      case 1: return 'Admin';
+      case 2: return 'Board Admin';
+      case 3: return 'Sys Admin';
+      case 4: return 'Organizer';
+      case 5: return 'Actionee';
+      case 6: return 'Invittee';
+      default: return level ? `Level ${level}` : '';
+    }
   }
 }
