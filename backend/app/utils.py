@@ -21,7 +21,7 @@ VECTOR_DIR = Path("vector_store")
 vector_db: Optional[FAISS] = None
 
 # Create text chunks from a larger text body
-def create_chunks_from_text(text, chunk_size=100, overlap=10):
+def create_chunks_from_text(text, chunk_size=500, overlap=100):
     words = text.split()
     chunks = []
     for i in range(0, len(words), chunk_size - overlap):
@@ -29,6 +29,7 @@ def create_chunks_from_text(text, chunk_size=100, overlap=10):
         if len(chunk.strip()) > 50:
             chunks.append(chunk)
     return chunks
+
 
 # Create document objects from text chunks
 def create_documents_from_chunks(chunks, doc_id, level: int | None = None):
@@ -103,7 +104,7 @@ def create_rag_chain(level: int | None = None):
 
     # If a level is provided, filter retrieval to matching chunks
     search_kwargs = {
-        "k": 20# Number of top documents to retrieve
+        "k": 6
     }
     # if level is not None:
     #     search_kwargs["filter"] = {"user_level": level}
@@ -126,19 +127,43 @@ def create_rag_chain(level: int | None = None):
         llm, retriever, contextualize_q_prompt
         )
     
-    qa_system_prompt = """You are a helpful assistant for the BoardPAC application, powered by GPT-4o and Retrieval-Augmented Generation (RAG). 
-All relevant BoardPAC knowledge is stored in the knowledge base, and you should answer based only on the provided retrieved context. Retrieved Context (Top Relevant Chunks): {context}
+    qa_system_prompt = """
+You are a helpful assistant for the BoardPAC application, powered by GPT-4o and Retrieval-Augmented Generation (RAG).
 
-Internally follow these steps:
-1. Summarize the user question in simpler words.
-2. Identify which retrieved text chunks from the provided context are directly relevant to the question.
-3. Combine those chunks into a clear outline.
-4. Draft a single, coherent, complete answer using only the relevant chunks.
+STRICT SCOPE:
+- You must ONLY answer questions about BoardPAC.
+- If a user asks something unrelated to BoardPAC, or the retrieved context does not contain the answer, politely decline per the Response Policies below.
+
+Retrieved Context (Top Relevant Chunks): {context}
+
+Internal Steps:
+1. Restate the user question in simpler words (internally).
+2. Identify which retrieved chunks directly answer the question; ignore everything else.
+3. If no chunk is relevant or coverage is insufficient, STOP and return the appropriate policy response (see Response Policies).
+4. Combine only the relevant information needed to answer the question — no extra background or explanation.
+5. Draft a short, clear, **direct answer focused strictly on the user’s question** using ONLY the retrieved context.
+
+Response Policies:
+- Out-of-scope (not about BoardPAC):
+  Return:
+  <h2>Out of Scope</h2>
+  <p>I can only answer questions about the BoardPAC system. Please ask a BoardPAC-related question.</p>
+
+- Insufficient context (about BoardPAC, but not found in {context}):
+  Return:
+  <h2>Not Enough Information</h2>
+  <p>I couldn’t find this in the BoardPAC knowledge base. Please provide more details or try another BoardPAC-specific query.</p>
+
+- No hallucinations: Never invent facts not present in the retrieved context.
 
 Output Rules:
-- **Only** return the final refined answer.
-- **Always** format the answer as fully valid HTML — using headings (`<h2>`), paragraphs (`<p>`), ordered/unordered lists (`<ol>`/`<ul>`), list items (`<li>`), and bold (`<strong>`) where needed.
-- **Do not** return Markdown or plain text or html as a string."""
+- Keep the answer short, focused, and directly addressing the question (“on the point”).
+- Use valid HTML tags (<h2>, <p>, <ul>, <li>, <strong>) — no Markdown or plain text.
+- Do not include explanations or background unless directly needed to answer the question.
+- Only return the final refined answer.
+
+"""
+
 
     qa_prompt = ChatPromptTemplate.from_messages(
         [

@@ -19,3 +19,4 @@ python-jose[cryptography]
 passlib
 pandas
 openpyxl
+marker-pdf
