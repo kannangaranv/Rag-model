@@ -6,6 +6,8 @@ from langchain_community.vectorstores import FAISS
 from app.db_utils import load_session_history, save_message
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.output_parsers import StrOutputParser
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
@@ -110,10 +112,23 @@ def create_rag_chain(level: int | None = None):
     #     search_kwargs["filter"] = {"user_level": level}
     retriever = vector_db.as_retriever(search_kwargs=search_kwargs)
     
-    contextualize_q_system_prompt = """Given a chat history and the latest user question \
-    which might reference context in the chat history, formulate a standalone question \
-    which can be understood without the chat history. Do NOT answer the question, \
-    just reformulate it if needed and otherwise return it as is."""
+    contextualize_q_system_prompt = """Rewrite the user’s latest message into a concise, standalone question.
+
+Use chat history only to resolve references in the latest message.
+Ignore low-information or boilerplate messages in history, including:
+- Acknowledgments: "ok", "okay", "thanks", "thank you", "noted"
+- Apologies/softeners: "sorry", "apologies"
+- Generic refusals/outcomes: "Out of Scope", "Not Enough Information", "I couldn't find"
+- Auto-responses/placeholders: "processing...", "please wait", "let me check"
+- Meta/system chatter: "as an AI", policy blurbs
+- Empty/near-empty content: emojis, lone punctuation
+- Repeated echoes of prior answers without new facts
+
+Rules:
+- If the latest message is already standalone, return it unchanged.
+- Preserve entities, product terms, numbers, dates, and constraints.
+- Do NOT answer; return only the rewritten question text (no quotes, no commentary).
+"""
 
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
         [
@@ -138,21 +153,20 @@ Retrieved Context (Top Relevant Chunks): {context}
 
 Internal Steps:
 1. Restate the user question in simpler words (internally).
-2. Identify which retrieved chunks directly answer the question; ignore everything else.
-3. If no chunk is relevant or coverage is insufficient, STOP and return the appropriate policy response (see Response Policies).
-4. Combine only the relevant information needed to answer the question — no extra background or explanation.
+2. Identify and use which retrieved chunks directly answer the question; ignore everything else.
+3. If cannot find relevant chunks to the question, STOP and return the appropriate policy response (see Response Policies).
+4. Combine only the relevant information needed to answer the question — no extra background or extra explanation.
 5. Draft a short, clear, **direct answer focused strictly on the user’s question** using ONLY the retrieved context.
 
 Response Policies:
+- Greetings / small talk (e.g., "hi", "hello", "hey", "good morning", "good afternoon", "good evening", "how are you", "thanks"):
+  Return:
+  <p>Hello! I can help with BoardPAC questions. What would you like to know?</p>
+
 - Out-of-scope (not about BoardPAC):
   Return:
   <h2>Out of Scope</h2>
   <p>I can only answer questions about the BoardPAC system. Please ask a BoardPAC-related question.</p>
-
-- Insufficient context (about BoardPAC, but not found in {context}):
-  Return:
-  <h2>Not Enough Information</h2>
-  <p>I couldn’t find this in the BoardPAC knowledge base. Please provide more details or try another BoardPAC-specific query.</p>
 
 - No hallucinations: Never invent facts not present in the retrieved context.
 
@@ -174,7 +188,38 @@ Output Rules:
     )
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
+    # Build a rewrite chain to produce a standalone question
+    rewrite_chain = contextualize_q_prompt | llm | StrOutputParser()
+
+    # Compose a RAG chain that:
+    # - Computes standalone question once
+    # - Retrieves context using the history-aware retriever
+    # - Feeds the standalone question as the human input to the QA prompt
+    # - Returns {"answer", "context"} to match existing callers
+    base = RunnablePassthrough.assign(
+        standalone_question=rewrite_chain,
+        context=history_aware_retriever,
+    )
+
+    map_to_qa_inputs = RunnableLambda(
+        lambda x: {
+            "context": x["context"],
+            "input": x["standalone_question"],
+            "chat_history": x.get("chat_history", []),
+        }
+    )
+
+    rag_chain = (
+        base
+        .assign(answer=map_to_qa_inputs | question_answer_chain)
+        | RunnableLambda(
+            lambda x: {
+                "answer": x["answer"],
+                "context": x["context"],
+                "standalone_question": x.get("standalone_question"),
+            }
+        )
+    )
 
     conversational_rag_chain = RunnableWithMessageHistory(
         rag_chain,
@@ -197,7 +242,13 @@ def invoke_and_save(session_id, input_text, level: int | None = None):
     )
 
     answer = res.get("answer")
+    standalone_q = res.get("standalone_question")
     docs = res.get("context", [])  
+
+    if standalone_q:
+        print(f"\n=== Standalone Question ===\n{standalone_q}")
+        # Save the reformulated question as a separate message role
+        save_message(session_id, "human_rewritten", standalone_q)
 
     for i, d in enumerate(docs, 1):
         print(f"\n=== Retrieved #{i} ===")
