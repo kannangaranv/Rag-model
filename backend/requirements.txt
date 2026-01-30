@@ -7,6 +7,8 @@ langchain-huggingface
 sentence-transformers
 langchain-community
 faiss-cpu
+pinecone-client
+langchain-pinecone
 langchain-openai
 pymupdf4llm
 python-multipart

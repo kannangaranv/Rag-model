@@ -1,8 +1,9 @@
 from uuid import uuid4
 from pathlib import Path
-from langchain_core.documents import Document
 from typing import Optional
-from langchain_community.vectorstores import FAISS
+import os
+
+from langchain_core.documents import Document
 from app.db_utils import load_session_history, save_message
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -11,16 +12,34 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
+try:
+    from langchain_community.vectorstores import FAISS
+    import faiss as _faiss
+    from langchain_community.docstore.in_memory import InMemoryDocstore
+except Exception:  
+    FAISS = None
+    _faiss = None
+    InMemoryDocstore = None
+
+try:
+    from langchain_pinecone import PineconeVectorStore
+    from pinecone import Pinecone
+except Exception:  
+    PineconeVectorStore = None
+    Pinecone = None
 
 from app.config import (
-    vector_store,
     llm,
-    embeddings
+    embeddings,
 )
+
+VECTOR_DB_PROVIDER = os.getenv("VECTOR_DB", "faiss").lower()
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "bp-index")
 
 VECTOR_DIR = Path("vector_store")
 
-vector_db: Optional[FAISS] = None
+vector_db: Optional[object] = None
 
 # Create text chunks from a larger text body
 def create_chunks_from_text(text, chunk_size=500, overlap=100):
@@ -64,21 +83,33 @@ def delete_documents_from_vector_store(doc_id):
     try:
         global vector_db
         if vector_db is None:
-            print("Vector store is not loaded.")
-            return
-        all_docs = vector_db.docstore._dict
-        del_list=[]
-        for key,doc in all_docs.items():
-            if doc.metadata["doc_id"]==doc_id:
-                del_list.append(key)
-
-        if del_list:
-            vector_db.delete(ids=del_list)
-            vector_db.save_local("vector_store")
             load_vector_store()
-            print(f"Deleted {len(del_list)} documents associated with {doc_id} from the vector store.")
+            if vector_db is None:
+                print("Vector store is not loaded.")
+                return
+
+        if VECTOR_DB_PROVIDER == "pinecone":
+            vector_db.delete(filter={"doc_id": doc_id})
+            print(f"Requested deletion in Pinecone for doc_id={doc_id}.")
         else:
-            print(f"No documents found for {doc_id} in the vector store.")
+            if not hasattr(vector_db, "docstore") or not hasattr(vector_db.docstore, "_dict"):
+                print("FAISS docstore not available; nothing to delete.")
+                return
+            all_docs = vector_db.docstore._dict
+            del_list = []
+            for key, doc in all_docs.items():
+                if doc.metadata.get("doc_id") == doc_id:
+                    del_list.append(key)
+
+            if del_list:
+                vector_db.delete(ids=del_list)
+                vector_db.save_local("vector_store")
+                load_vector_store()
+                print(
+                    f"Deleted {len(del_list)} documents associated with {doc_id} from the FAISS vector store."
+                )
+            else:
+                print(f"No documents found for {doc_id} in the FAISS vector store.")
     except Exception as e:
         print(f"Error deleting documents from vector store: {e}")
 
@@ -86,14 +117,20 @@ def delete_documents_from_vector_store(doc_id):
 def upload_documents_to_vector_store(documents, uuids):
     try:
         global vector_db
-        if (VECTOR_DIR / "index.faiss").exists() and (VECTOR_DIR / "index.pkl").exists():
+        if vector_db is None:
+            load_vector_store()
+        if vector_db is None:
+            raise RuntimeError("Vector store is not initialized. Upload aborted.")
+
+        if VECTOR_DB_PROVIDER == "pinecone":
+            # Remote index; no save_local
+            vector_db.add_documents(documents=documents, ids=uuids)
+        else:
+            # Local FAISS; persist to disk
             vector_db.add_documents(documents=documents, ids=uuids)
             vector_db.save_local("vector_store")
             load_vector_store()
-        else:
-            vector_store.add_documents(documents=documents, ids=uuids)
-            vector_store.save_local("vector_store")
-            load_vector_store()
+
         print("Documents uploaded to vector store successfully.")
     except Exception as e:
         print(f"Error uploading documents to vector store: {e}")
@@ -261,15 +298,58 @@ def invoke_and_save(session_id, input_text, level: int | None = None):
 
 # Load the vector store from disk
 def load_vector_store() -> None:
+    """Initialize or connect to the configured vector store.
+
+    - FAISS: load from local files if present; otherwise create an empty in-memory index.
+    - Pinecone: connect to remote index by name; no local files involved.
+    """
     global vector_db
-    if (VECTOR_DIR / "index.faiss").exists() and (VECTOR_DIR / "index.pkl").exists():
-        vector_db = FAISS.load_local(
-            folder_path=str(VECTOR_DIR),
-            embeddings=embeddings,
-            allow_dangerous_deserialization=True,
-        )
-        print(f"VectorStore Loaded from {VECTOR_DIR}")
-    else:
+
+    if VECTOR_DB_PROVIDER == "pinecone":
+        if Pinecone is None or PineconeVectorStore is None:
+            print("Pinecone dependencies are not available. Did you install pinecone-client and langchain-pinecone?")
+            vector_db = None
+            return
+        try:
+            _pc = Pinecone(api_key=PINECONE_API_KEY)  
+            vector_db = PineconeVectorStore(
+                index_name=PINECONE_INDEX_NAME,
+                embedding=embeddings,
+            )
+            print(f"Connected to Pinecone index '{PINECONE_INDEX_NAME}'.")
+        except Exception as e:  # noqa: BLE001
+            print(f"Failed connecting to Pinecone: {e}")
+            vector_db = None
+        return
+
+    if FAISS is None or _faiss is None:
+        print("FAISS dependencies not available. Install faiss-cpu and langchain-community.")
         vector_db = None
-        print("VectorStore Not found; start by uploading a PDF/Video.")
+        return
+
+    if (VECTOR_DIR / "index.faiss").exists() and (VECTOR_DIR / "index.pkl").exists():
+        try:
+            vector_db = FAISS.load_local(
+                folder_path=str(VECTOR_DIR),
+                embeddings=embeddings,
+                allow_dangerous_deserialization=True,
+            )
+            print(f"FAISS VectorStore loaded from {VECTOR_DIR}")
+        except Exception as e:  # noqa: BLE001
+            print(f"Failed loading FAISS store from disk: {e}")
+            vector_db = None
+    else:
+        try:
+            dim = len(embeddings.embed_query("hello world"))
+            index = _faiss.IndexFlatL2(dim)
+            vector_db = FAISS(
+                embedding_function=embeddings,
+                index=index,
+                docstore=InMemoryDocstore(),
+                index_to_docstore_id={},
+            )
+            print("Initialized empty FAISS vector store (no local files present).")
+        except Exception as e:  
+            print(f"Failed initializing empty FAISS index: {e}")
+            vector_db = None
 

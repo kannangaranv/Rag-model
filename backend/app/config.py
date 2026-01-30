@@ -1,8 +1,6 @@
-import faiss
 import os
+import faiss as _faiss  # Optional: only needed when VECTOR_DB=faiss
 import urllib
-from langchain_community.docstore.in_memory import InMemoryDocstore
-from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from dotenv import load_dotenv
@@ -11,7 +9,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Load environment variables
 load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")      
+VECTOR_DB = os.getenv("VECTOR_DB", "faiss").lower()
 SERVER   = os.getenv("SQL_SERVER", "NUWANK-BP") 
 DATABASE = os.getenv("SQL_DATABASE", "KnowledgeBase")
 USER     = os.getenv("SQL_USER", "sa1")                      
@@ -22,16 +21,21 @@ DRIVER   = os.getenv("SQL_DRIVER", "ODBC Driver 18 for SQL Server")
 # embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 embeddings = OpenAIEmbeddings(model = "text-embedding-ada-002", api_key = OPENAI_API_KEY)
 
-# Initialize FAISS index
-index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
-
-# Initialize vector store
-vector_store = FAISS(
-    embedding_function=embeddings,
-    index=index,
-    docstore=InMemoryDocstore(),
-    index_to_docstore_id={},
-)
+# Initialize vector store (conditional on provider)
+if VECTOR_DB == "faiss":
+    from langchain_community.vectorstores import FAISS  
+    from langchain_community.docstore.in_memory import InMemoryDocstore  
+    if _faiss is None:
+        raise ImportError("FAISS backend selected but faiss is not installed")
+    index = _faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
+    vector_store = FAISS(
+        embedding_function=embeddings,
+        index=index,
+        docstore=InMemoryDocstore(),
+        index_to_docstore_id={},
+    )
+else:
+    vector_store = None  # Not used when Pinecone is selected
 
 # Initialize LLM
 llm = ChatOpenAI(
