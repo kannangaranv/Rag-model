@@ -1,5 +1,8 @@
 import os
-import faiss as _faiss  # Optional: only needed when VECTOR_DB=faiss
+try:
+    import faiss as _faiss  # Optional: only needed when VECTOR_DB=faiss
+except Exception:
+    _faiss = None
 import urllib
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings

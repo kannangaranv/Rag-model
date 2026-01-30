@@ -28,6 +28,11 @@ except Exception:
     PineconeVectorStore = None
     Pinecone = None
 
+try:
+    from langchain_milvus import Milvus as MilvusVectorStore
+except Exception:
+    MilvusVectorStore = None
+
 from app.config import (
     llm,
     embeddings,
@@ -36,6 +41,10 @@ from app.config import (
 VECTOR_DB_PROVIDER = os.getenv("VECTOR_DB", "faiss").lower()
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "bp-index")
+MILVUS_URI = os.getenv("MILVUS_URI", "http://localhost:19530")
+MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION", "bp_collection")
+MILVUS_TOKEN = os.getenv("MILVUS_TOKEN")
+MILVUS_DB_NAME = os.getenv("MILVUS_DB_NAME")
 
 VECTOR_DIR = Path("vector_store")
 
@@ -91,6 +100,10 @@ def delete_documents_from_vector_store(doc_id):
         if VECTOR_DB_PROVIDER == "pinecone":
             vector_db.delete(filter={"doc_id": doc_id})
             print(f"Requested deletion in Pinecone for doc_id={doc_id}.")
+        elif VECTOR_DB_PROVIDER == "milvus":
+            expr = f'doc_id == "{doc_id}"'
+            vector_db.delete(expr=expr)
+            print(f"Requested deletion in Milvus for doc_id={doc_id}.")
         else:
             if not hasattr(vector_db, "docstore") or not hasattr(vector_db.docstore, "_dict"):
                 print("FAISS docstore not available; nothing to delete.")
@@ -124,6 +137,9 @@ def upload_documents_to_vector_store(documents, uuids):
 
         if VECTOR_DB_PROVIDER == "pinecone":
             # Remote index; no save_local
+            vector_db.add_documents(documents=documents, ids=uuids)
+        elif VECTOR_DB_PROVIDER == "milvus":
+            # Remote Milvus; no save_local
             vector_db.add_documents(documents=documents, ids=uuids)
         else:
             # Local FAISS; persist to disk
@@ -322,6 +338,28 @@ def load_vector_store() -> None:
             vector_db = None
         return
 
+    if VECTOR_DB_PROVIDER == "milvus":
+        if MilvusVectorStore is None:
+            print("Milvus dependencies are not available. Did you install langchain-milvus and pymilvus?")
+            vector_db = None
+            return
+        try:
+            connection_args: dict = {"uri": MILVUS_URI}
+            if MILVUS_TOKEN:
+                connection_args["token"] = MILVUS_TOKEN
+            if MILVUS_DB_NAME:
+                connection_args["db_name"] = MILVUS_DB_NAME
+            vector_db = MilvusVectorStore(
+                embedding_function=embeddings,
+                connection_args=connection_args,
+                collection_name=MILVUS_COLLECTION,
+            )
+            print(f"Connected to Milvus collection '{MILVUS_COLLECTION}' at '{MILVUS_URI}'.")
+        except Exception as e:  # noqa: BLE001
+            print(f"Failed connecting to Milvus: {e}")
+            vector_db = None
+        return
+
     if FAISS is None or _faiss is None:
         print("FAISS dependencies not available. Install faiss-cpu and langchain-community.")
         vector_db = None
@@ -352,4 +390,3 @@ def load_vector_store() -> None:
         except Exception as e:  
             print(f"Failed initializing empty FAISS index: {e}")
             vector_db = None
-

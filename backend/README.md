@@ -64,6 +64,18 @@ Notes
 - Registration always creates users at level 1. Use the admin endpoint to elevate.
 ```
 
+## Milvus Setup
+
+# download docker-compose.yml
+```bash
+Invoke-WebRequest https://github.com/milvus-io/milvus/releases/download/v2.6.2/milvus-standalone-docker-compose.yml -OutFile docker-compose.yml
+```
+
+# start Milvus
+```bash
+docker compose up -d
+```
+
 
 
 
