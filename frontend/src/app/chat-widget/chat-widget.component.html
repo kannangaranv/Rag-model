@@ -1,40 +1,45 @@
 <div #rootEl class="chat-widget-root">
-
-  <!-- Floating Launcher -->
-  <button class="assistant-launcher"
-          (click)="toggle()"
-          [attr.aria-expanded]="open"
-          aria-controls="assistantPanel"
-          aria-haspopup="dialog"
-          title="Chat with Assistant">
+  <button
+    class="assistant-launcher"
+    (click)="toggle()"
+    [attr.aria-expanded]="open"
+    aria-controls="assistantPanel"
+    aria-haspopup="dialog"
+    title="Chat with Assistant"
+  >
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 2a7 7 0 0 0-7 7v1a5 5 0 0 0-3 4.58V17a3 3 0 0 0 3 3h3l3 2 3-2h3a3 3 0 0 0 3-3v-2.42A5 5 0 0 0 19 10V9a7 7 0 0 0-7-7Z"
-            fill="currentColor"/>
+      <path
+        d="M12 2a7 7 0 0 0-7 7v1a5 5 0 0 0-3 4.58V17a3 3 0 0 0 3 3h3l3 2 3-2h3a3 3 0 0 0 3-3v-2.42A5 5 0 0 0 19 10V9a7 7 0 0 0-7-7Z"
+        fill="currentColor"
+      />
     </svg>
   </button>
 
-  <!-- Docked Chat Panel -->
   <section id="assistantPanel" class="assistant-panel docked" role="dialog" aria-modal="true" *ngIf="open">
-
-    <!-- Header -->
     <header class="panel-header">
-      <h3>AI-Assistant</h3>
-      <button class="close-btn" (click)="toggle()" aria-label="Close">✕</button>
+      <div class="header-copy">
+        <h3>AI-Assistant</h3>
+        <small *ngIf="(activePaper$ | async) as activePaper">Paper mode: {{ activePaper.name }}</small>
+      </div>
+      <button class="close-btn" (click)="toggle()" aria-label="Close">x</button>
     </header>
 
-    <!-- Messages -->
     <div #messagesRef class="messages" aria-live="polite" aria-atomic="false">
       <div *ngFor="let m of messages" class="bubble" [class.user]="m.role==='user'">
-        <!-- Render plain text for user, HTML for assistant -->
         <div *ngIf="m.role==='user'">{{ m.text }}</div>
         <div *ngIf="m.role==='assistant'" [innerHTML]="m.text"></div>
       </div>
-      <div class="bubble" *ngIf="loading">typing…</div>
+      <div class="bubble" *ngIf="loading">typing...</div>
     </div>
 
-    <!-- Composer -->
     <form class="panel-composer" (ngSubmit)="onSend()">
-      <textarea #inputRef [(ngModel)]="input" name="message" placeholder="Type a message..." rows="1"></textarea>
+      <textarea
+        #inputRef
+        [(ngModel)]="input"
+        name="message"
+        [placeholder]="(activePaper$ | async) ? 'Ask about the opened paper...' : 'Type a message...'"
+        rows="1"
+      ></textarea>
       <button class="send-btn" [disabled]="!input.trim() || loading" type="submit">Send</button>
     </form>
   </section>

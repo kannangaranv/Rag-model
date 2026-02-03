@@ -42,6 +42,21 @@ class VideoListResponse(BaseModel):
     page: int
     page_size: int
 
+class PaperMeta(BaseModel):
+    id: UUID
+    file_name: str
+    content_type: str
+    file_size_bytes: int
+    uploaded_at: datetime
+    has_md_text: bool
+    level: Optional[int] = None
+
+class PaperListResponse(BaseModel):
+    items: List[PaperMeta]
+    total: int
+    page: int
+    page_size: int
+
 class UserCreate(BaseModel):
     username: str
     password: str

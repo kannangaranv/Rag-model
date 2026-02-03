@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.routes import router as api_router
 from app.auth import router as auth_router
-from app.utils import load_vector_store
+from app.utils import load_vector_store, load_paper_vector_store
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import Base, engine, ensure_database
@@ -20,6 +20,7 @@ ALLOWED_ORIGINS = [
 async def lifespan(app: FastAPI):
     ensure_database(DATABASE)
     load_vector_store()
+    load_paper_vector_store()
     Base.metadata.create_all(bind=engine)
     yield
 

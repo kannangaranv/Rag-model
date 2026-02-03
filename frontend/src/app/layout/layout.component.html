@@ -24,6 +24,10 @@
         <i class="bi bi-collection me-2"></i> Knowledge Base
       </a>
 
+      <a class="nav-link" routerLink="/papers" routerLinkActive="active" *ngIf="me">
+        <i class="bi bi-file-earmark-text me-2"></i> Papers
+      </a>
+
       <a class="nav-link" routerLink="/users" routerLinkActive="active" *ngIf="me && me.level === 1">
         <i class="bi bi-people me-2"></i> Users
       </a>

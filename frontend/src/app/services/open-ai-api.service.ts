@@ -41,6 +41,23 @@ export interface VideoListResponse {
   total: number;
 }
 
+export interface PaperMeta {
+  id: string;
+  file_name: string;
+  content_type: string;
+  file_size_bytes: number;
+  uploaded_at: string;
+  has_md_text?: boolean;
+  level?: number;
+}
+
+export interface PaperListResponse {
+  items: PaperMeta[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -52,6 +69,10 @@ export class OpenAiApiService {
 
   public sendMessage(message: string, level: number) {
     return this.http.post<any>(`${this.apiUrl}/query/${level}`, { query: message });
+  }
+
+  public sendPaperMessage(paperId: string, message: string) {
+    return this.http.post<any>(`${this.apiUrl}/papers/${paperId}/query`, { query: message });
   }
 
   uploadDocument(file: File, level: number) {
@@ -117,5 +138,31 @@ export class OpenAiApiService {
   videoDeleteUrl(id: string) {
     return this.http.delete(`${this.apiUrl}/videos/${id}`);
   } 
+
+  uploadPaperWithProgress(file: File, level: number): Observable<HttpEvent<any>> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<any>(`${this.apiUrl}/upload-papers/${level}`, form, {
+      reportProgress: true,
+      observe: 'events',
+    });
+  }
+
+  getPapers(page = 1, pageSize = 10, q = ''): Observable<PaperListResponse> {
+    const params = { page, page_size: pageSize, q };
+    return this.http.get<PaperListResponse>(`${this.apiUrl}/papers`, { params: params as any });
+  }
+
+  paperViewUrl(id: string) {
+    return `${this.apiUrl}/papers/${id}/view`;
+  }
+
+  paperDownloadUrl(id: string) {
+    return `${this.apiUrl}/papers/${id}/download`;
+  }
+
+  paperDeleteUrl(id: string) {
+    return this.http.delete(`${this.apiUrl}/papers/${id}`);
+  }
 
 }

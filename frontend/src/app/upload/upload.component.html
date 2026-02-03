@@ -120,6 +120,148 @@
 </div>
 
 <div class="uploader-card">
+  <h3 class="uploader-title">Upload Papers (Admin)</h3>
+
+  <div
+    class="dropzone"
+    [class.dragover]="dragOverPaper"
+    (dragover)="onPaperDragOver($event)"
+    (dragleave)="onPaperDragLeave($event)"
+    (drop)="onPaperDrop($event)"
+    (click)="paperInput.click()"
+    tabindex="0"
+    (keydown.enter)="paperInput.click()"
+    aria-label="Upload Paper. Click or drag & drop."
+  >
+    <div class="dz-icon">
+      <img src="assets/images/pdf.png" alt="Paper Icon" />
+    </div>
+
+    <div class="dz-text">
+      <strong>Upload a Paper (separate index)</strong>
+      <span>Drag & drop your file here, or <u>browse</u></span>
+      <small>Only .pdf - Max 50 MB</small>
+    </div>
+
+    <input
+      #paperInput
+      type="file"
+      accept="application/pdf"
+      (change)="onPaperFileSelected($event)"
+      hidden
+    />
+  </div>
+
+  <div class="file-row" *ngIf="paperFile">
+    <div class="file-meta">
+      <div class="file-name" [title]="paperFile.name">{{ paperFile.name }}</div>
+      <div class="file-size">{{ formatSize(paperFile.size) }}</div>
+    </div>
+    <button class="btn-link" (click)="clearPaperFile()" [disabled]="paperUploading">Remove</button>
+  </div>
+
+  <div class="progress-wrap" *ngIf="paperUploading">
+    <div class="progress-bar">
+      <div class="progress-fill" [style.width.%]="paperProgress"></div>
+    </div>
+    <div class="progress-label">{{ paperProgress }}%</div>
+  </div>
+
+  <div class="actions">
+    <label class="lvl">
+      <span>Related Level</span>
+      <select [(ngModel)]="paperLevel">
+        <option *ngFor="let o of levelOptions" [ngValue]="o.value">{{ o.label }}</option>
+      </select>
+    </label>
+    <button class="btn btn-primary" (click)="uploadPaper()" [disabled]="!paperFile || paperUploading">
+      {{ paperUploading ? 'Uploading...' : 'Upload Paper' }}
+    </button>
+    <span class="status success" *ngIf="!paperUploading && paperMessage && !paperError">{{ paperMessage }}</span>
+    <span class="status error" *ngIf="!paperUploading && paperError">{{ paperError }}</span>
+  </div>
+</div>
+
+<div class="docs-card">
+  <div class="docs-header">
+    <h4>Stored Papers</h4>
+    <div class="docs-controls">
+      <input
+        type="text"
+        placeholder="Search filename..."
+        [(ngModel)]="qPapers"
+        (keyup.enter)="onPaperSearchEnter()"
+      />
+      <button class="btn btn-secondary" (click)="loadPapers(1)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="docs-body" *ngIf="!papersLoading; else paperLoadingTpl">
+    <div class="preview-card" *ngIf="paperPreviewUrl">
+      <div class="preview-head">
+        <strong>{{ paperPreviewName }}</strong>
+        <button class="btn btn-secondary" (click)="closePaperPreview()">Close Preview</button>
+      </div>
+      <iframe class="preview-frame" [src]="paperPreviewUrl" title="Paper preview"></iframe>
+      <div class="qa-box">
+        <textarea
+          [(ngModel)]="paperQuestion"
+          rows="2"
+          class="qa-input"
+          placeholder="Ask a question about this paper..."
+        ></textarea>
+        <button class="btn btn-primary" (click)="askAboutSelectedPaper()" [disabled]="paperAsking || !paperQuestion.trim()">
+          {{ paperAsking ? 'Asking...' : 'Ask' }}
+        </button>
+      </div>
+      <div class="qa-answer" *ngIf="paperAnswerHtml" [innerHTML]="paperAnswerHtml"></div>
+      <div class="qa-error" *ngIf="paperAnswerError">{{ paperAnswerError }}</div>
+    </div>
+
+    <div *ngIf="papers.length === 0" class="empty">No papers found.</div>
+
+    <table class="docs-table" *ngIf="papers.length > 0">
+      <thead>
+        <tr>
+          <th style="width: 36px;"></th>
+          <th>File name</th>
+          <th>Level</th>
+          <th>Size</th>
+          <th>Uploaded</th>
+          <th style="width: 160px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let p of papers">
+          <td class="icon-cell">
+            <img src="assets/images/pdf.png" alt="Paper" class="row-icon" />
+          </td>
+          <td class="truncate" [title]="p.file_name">{{ p.file_name }}</td>
+          <td>{{ roleName(p.level) }}</td>
+          <td>{{ formatSize(p.file_size_bytes) }}</td>
+          <td>{{ p.uploaded_at | date:'medium' }}</td>
+          <td class="actions-cell">
+            <button class="btn btn-text" (click)="viewPaper(p)">Preview</button>
+            <button class="btn btn-text" (click)="downloadPaper(p)">Download</button>
+            <button class="btn btn-text" (click)="deletePaper(p)">Delete</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pager" *ngIf="totalPapers > pageSizePapers">
+      <button class="btn btn-secondary" (click)="prevPaperPage()" [disabled]="pagePapers === 1">Prev</button>
+      <span>Page {{ pagePapers }} / {{ totalPaperPages }}</span>
+      <button class="btn btn-secondary" (click)="nextPaperPage()" [disabled]="pagePapers >= totalPaperPages">Next</button>
+    </div>
+  </div>
+
+  <ng-template #paperLoadingTpl>
+    <div class="loading-row">Loading papers...</div>
+  </ng-template>
+</div>
+
+<div class="uploader-card">
   <h3 class="uploader-title">Upload Training Video</h3>
 
   <div

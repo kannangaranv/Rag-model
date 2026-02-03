@@ -1,0 +1,78 @@
+<div class="docs-card">
+  <div class="docs-header">
+    <h4>Published Papers</h4>
+    <div class="docs-controls">
+      <input
+        type="text"
+        placeholder="Search filename..."
+        [(ngModel)]="q"
+        (keyup.enter)="onSearchEnter()"
+      />
+      <button class="btn btn-secondary" (click)="load(1)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="docs-body" *ngIf="!loading; else loadingTpl">
+    <div class="preview-card" *ngIf="previewUrl">
+      <div class="preview-head">
+        <strong>{{ previewPaper?.file_name }}</strong>
+        <button class="btn btn-secondary" (click)="closePreview()">Close Preview</button>
+      </div>
+      <iframe class="preview-frame" [src]="previewUrl" title="Paper preview"></iframe>
+      <div class="qa-box">
+        <textarea
+          [(ngModel)]="question"
+          rows="2"
+          class="qa-input"
+          placeholder="Ask a question about this paper..."
+        ></textarea>
+        <button class="btn btn-primary" (click)="askAboutCurrentPaper()" [disabled]="asking || !question.trim()">
+          {{ asking ? 'Asking...' : 'Ask' }}
+        </button>
+      </div>
+      <div class="qa-answer" *ngIf="answerHtml" [innerHTML]="answerHtml"></div>
+      <div class="qa-error" *ngIf="answerError">{{ answerError }}</div>
+    </div>
+
+    <div *ngIf="papers.length === 0" class="empty">No papers found.</div>
+
+    <table class="docs-table" *ngIf="papers.length > 0">
+      <thead>
+        <tr>
+          <th style="width: 36px;"></th>
+          <th>File name</th>
+          <th>Level</th>
+          <th>Size</th>
+          <th>Uploaded</th>
+          <th style="width: 200px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let p of papers">
+          <td class="icon-cell">
+            <img src="assets/images/pdf.png" alt="Paper" class="row-icon" />
+          </td>
+          <td class="truncate" [title]="p.file_name">{{ p.file_name }}</td>
+          <td>{{ roleName(p.level) }}</td>
+          <td>{{ formatSize(p.file_size_bytes) }}</td>
+          <td>{{ p.uploaded_at | date:'medium' }}</td>
+          <td class="actions-cell">
+            <button class="btn btn-text" (click)="viewPaper(p)">Preview</button>
+            <button class="btn btn-text" (click)="downloadPaper(p)">Download</button>
+            <button class="btn btn-text" *ngIf="canUpload" (click)="deletePaper(p)">Delete</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pager" *ngIf="total > pageSize">
+      <button class="btn btn-secondary" (click)="prevPage()" [disabled]="page === 1">Prev</button>
+      <span>Page {{ page }} / {{ totalPages }}</span>
+      <button class="btn btn-secondary" (click)="nextPage()" [disabled]="page >= totalPages">Next</button>
+    </div>
+  </div>
+
+  <ng-template #loadingTpl>
+    <div class="loading-row">Loading papers...</div>
+  </ng-template>
+</div>

@@ -39,6 +39,14 @@
   font-weight: 700;
 }
 .panel-header h3 { margin: 0; font-size: 16px; }
+.header-copy { display: flex; flex-direction: column; min-width: 0; }
+.header-copy small {
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .close-btn { border: 0; background: transparent; cursor: pointer; font-size: 18px; }
 
 /* ===== Messages ===== */

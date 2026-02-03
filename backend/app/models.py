@@ -29,6 +29,17 @@ class Video(Base):
     Level         = Column(Integer,         nullable=True)
     UploadedAt    = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
 
+class Paper(Base):
+    __tablename__ = "Papers"
+    Id            = Column(UNIQUEIDENTIFIER, primary_key=True)
+    FileName      = Column(NVARCHAR(255),   nullable=False)
+    ContentType   = Column(NVARCHAR(100),   nullable=False)
+    FileSizeBytes = Column(Integer,         nullable=False)
+    Content       = Column(LargeBinary,     nullable=False)
+    MdText        = Column(NVARCHAR(None))
+    Level         = Column(Integer,         nullable=True)
+    UploadedAt    = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
+
 class Session(Base):
     __tablename__ = "sessions"
     id = Column(Integer, primary_key=True, autoincrement=True)
