@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { environment } from 'src/environments/enviornment';
 import { HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { AuthService } from '../auth/auth.service';
 
 export interface DocumentMeta {
   id: string;
@@ -65,14 +66,17 @@ export class OpenAiApiService {
 
   private apiUrl = environment.apiUrl; 
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient, private auth: AuthService) { }
 
-  public sendMessage(message: string, level: number) {
-    return this.http.post<any>(`${this.apiUrl}/query/${level}`, { query: message });
+  public sendMessage(message: string, level: number, paperId?: string | null) {
+    const payload: any = { query: message };
+    if (paperId) payload.paper_id = paperId;
+    return this.http.post<any>(`${this.apiUrl}/query/${level}`, payload);
   }
 
   public sendPaperMessage(paperId: string, message: string) {
-    return this.http.post<any>(`${this.apiUrl}/papers/${paperId}/query`, { query: message });
+    const level = this.auth.getStoredUser()?.level ?? 6;
+    return this.sendMessage(message, level, paperId);
   }
 
   uploadDocument(file: File, level: number) {

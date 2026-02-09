@@ -1,6 +1,6 @@
 import os
 try:
-    import faiss as _faiss  # Optional: only needed when VECTOR_DB=faiss
+    import faiss as _faiss 
 except Exception:
     _faiss = None
 import urllib
@@ -38,7 +38,7 @@ if VECTOR_DB == "faiss":
         index_to_docstore_id={},
     )
 else:
-    vector_store = None  # Not used when Pinecone is selected
+    vector_store = None  
 
 # Initialize LLM
 llm = ChatOpenAI(

@@ -37,10 +37,13 @@ from app.utils import (
     create_documents_from_vector_sentences,
     upload_documents_to_vector_store,
     upload_papers_to_vector_store,
-    invoke_and_save,
-    invoke_paper_query_and_save,
+    invoke_auto_route_and_save,
     delete_documents_from_vector_store,
     delete_papers_from_vector_store,
+    upload_manual_profile_to_vector_store,
+    upload_paper_profile_to_vector_store,
+    delete_manual_profile_from_vector_store,
+    delete_paper_profile_from_vector_store,
 )
 from app.video_utils import get_transcription_from_video
 from app.file_utils import _parse_range_header
@@ -49,11 +52,11 @@ from starlette import status
 from sqlalchemy.exc import SQLAlchemyError
 from app.security import get_current_user, require_upload_permission
 from app.models import User
+from app.db_utils import upsert_knowledge_profile, delete_knowledge_profile
 
-# neglest 
 router = APIRouter()
 
-# API to query documents and get responses from llm.
+# API to query documents
 @router.post("/query/{level}", response_model=QueryResponse, status_code=status.HTTP_200_OK)
 async def query_documents(level: int, payload: QueryRequest, current_user: User = Depends(get_current_user)):
     username = current_user.Username
@@ -61,13 +64,27 @@ async def query_documents(level: int, payload: QueryRequest, current_user: User 
         raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    paper_id = (payload.paper_id or "").strip() or None
+    if paper_id:
+        with SessionLocal() as db:
+            exists = db.execute(
+                text("SELECT 1 FROM dbo.Papers WHERE Id = CONVERT(uniqueidentifier, :id)"),
+                {"id": paper_id},
+            ).scalar()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Paper not found")
     try:
-        response = invoke_and_save(username, payload.query, level)
+        response = invoke_auto_route_and_save(
+            username,
+            payload.query,
+            level,
+            paper_id=paper_id,
+        )
         return QueryResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Upload pdf to vector store and sql server
+# Upload document to vector store and sql server
 @router.post("/upload-documents/{level}", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_documents(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
@@ -111,6 +128,17 @@ async def upload_documents(level: int, file: UploadFile = File(...), _: str = De
         chunks = create_chunks_from_text(md_text)
         documents, uuids = create_documents_from_chunks(chunks, doc_id, level)
         upload_documents_to_vector_store(documents, uuids)
+        profile_text = upload_manual_profile_to_vector_store(
+            doc_id=doc_id,
+            content=md_text,
+            file_name=file.filename,
+        )
+        upsert_knowledge_profile(
+            doc_id=doc_id,
+            source_type="manual",
+            file_name=file.filename or "document.pdf",
+            profile_text=profile_text,
+        )
 
         return UploadDocumentResponse(
             message="Document uploaded to vector store.",
@@ -176,6 +204,11 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
         chunks = create_chunks_from_text(transcription)
         documents, uuids = create_documents_from_chunks(chunks, video_id, level)
         upload_documents_to_vector_store(documents, uuids)
+        upload_manual_profile_to_vector_store(
+            doc_id=video_id,
+            content=transcription,
+            file_name=file.filename,
+        )
 
         return UploadDocumentResponse(
             message="Video uploaded to vector store.",
@@ -187,8 +220,7 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
         if temp_path:
             temp_path.unlink(missing_ok=True)
 
-
-# Upload papers to dedicated paper vector store and sql server
+# Upload paper to dedicated vector store and sql server
 @router.post("/upload-papers/{level}", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_papers(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
@@ -234,6 +266,17 @@ async def upload_papers(level: int, file: UploadFile = File(...), _: str = Depen
         chunks = create_chunks_from_text(md_text)
         documents, uuids = create_documents_from_chunks(chunks, paper_id, level)
         upload_papers_to_vector_store(documents, uuids)
+        profile_text = upload_paper_profile_to_vector_store(
+            doc_id=paper_id,
+            content=md_text,
+            file_name=file.filename,
+        )
+        upsert_knowledge_profile(
+            doc_id=paper_id,
+            source_type="paper",
+            file_name=file.filename or "paper.pdf",
+            profile_text=profile_text,
+        )
 
         return UploadDocumentResponse(
             message="Paper uploaded to dedicated vector store.",
@@ -246,33 +289,34 @@ async def upload_papers(level: int, file: UploadFile = File(...), _: str = Depen
         if temp_path:
             temp_path.unlink(missing_ok=True)
 
-@router.post("/papers/{paper_id}/query", response_model=QueryResponse, status_code=status.HTTP_200_OK)
-def query_selected_paper(
-    paper_id: UUID,
-    payload: QueryRequest,
-    current_user: User = Depends(get_current_user),
-):
-    if not payload.query.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+# @router.post("/papers/{paper_id}/query", response_model=QueryResponse, status_code=status.HTTP_200_OK)
+# def query_selected_paper(
+#     paper_id: UUID,
+#     payload: QueryRequest,
+#     current_user: User = Depends(get_current_user),
+# ):
+#     if not payload.query.strip():
+#         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
-    with SessionLocal() as db:
-        exists = db.execute(
-            text("SELECT 1 FROM dbo.Papers WHERE Id = CONVERT(uniqueidentifier, :id)"),
-            {"id": str(paper_id)},
-        ).scalar()
-    if not exists:
-        raise HTTPException(status_code=404, detail="Paper not found")
+#     with SessionLocal() as db:
+#         exists = db.execute(
+#             text("SELECT 1 FROM dbo.Papers WHERE Id = CONVERT(uniqueidentifier, :id)"),
+#             {"id": str(paper_id)},
+#         ).scalar()
+#     if not exists:
+#         raise HTTPException(status_code=404, detail="Paper not found")
 
-    try:
-        response = invoke_paper_query_and_save(
-            session_id=current_user.Username,
-            input_text=payload.query,
-            paper_id=str(paper_id),
-        )
-        return QueryResponse(response=response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+#     try:
+#         response = invoke_paper_query_and_save(
+#             session_id=current_user.Username,
+#             input_text=payload.query,
+#             paper_id=str(paper_id),
+#         )
+#         return QueryResponse(response=response)
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
+# API to upload user roles from Excel file
 @router.post("/upload-user-roles", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_user_roles(file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",):
@@ -448,6 +492,7 @@ def view_document(doc_id: UUID, request: Request):
     }
     return Response(content=blob, media_type=content_type, headers=headers)
 
+# API to delete documents
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(doc_id: str, _: str = Depends(require_upload_permission())):
     doc_id = (doc_id or "").strip()
@@ -471,6 +516,8 @@ def delete_document(doc_id: str, _: str = Depends(require_upload_permission())):
     try:
         print("Deleting document from vector store:", doc_id)
         delete_documents_from_vector_store(doc_id)
+        delete_manual_profile_from_vector_store(doc_id)
+        delete_knowledge_profile(doc_id=doc_id, source_type="manual")
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from vector store")
 
@@ -623,6 +670,8 @@ def delete_paper(paper_id: str, _: str = Depends(require_upload_permission())):
     try:
         print("Deleting paper from dedicated vector store:", paper_id)
         delete_papers_from_vector_store(paper_id)
+        delete_paper_profile_from_vector_store(paper_id)
+        delete_knowledge_profile(doc_id=paper_id, source_type="paper")
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from paper vector store")
 
@@ -765,6 +814,7 @@ def view_video(video_id: UUID, request: Request):
     }
     return Response(content=blob, media_type=content_type, headers=headers)
 
+# API to delete videos
 @router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
     video_id = (video_id or "").strip()
@@ -788,6 +838,7 @@ def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
     try:
        print("Deleting video from vector store:", video_id)
        delete_documents_from_vector_store(video_id)
+       delete_manual_profile_from_vector_store(video_id)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from vector store")
 
@@ -807,6 +858,7 @@ def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+# API to delete user role files
 @router.delete("/user-roles/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user_role_file(file_id: str, _: str = Depends(require_upload_permission())):
     file_id = (file_id or "").strip()
@@ -830,6 +882,7 @@ def delete_user_role_file(file_id: str, _: str = Depends(require_upload_permissi
     try:
        print("Deleting user role file from vector store:", file_id)
        delete_documents_from_vector_store(file_id)
+       delete_manual_profile_from_vector_store(file_id)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from vector store")
 

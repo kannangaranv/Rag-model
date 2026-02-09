@@ -5,6 +5,7 @@ from uuid import UUID
 
 class QueryRequest(BaseModel):
     query: str
+    paper_id: Optional[str] = None
 
 class QueryResponse(BaseModel):
     response: str
