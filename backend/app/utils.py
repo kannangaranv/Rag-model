@@ -228,7 +228,7 @@ def _build_profile_text(content: str, source_type: str, file_name: str | None = 
     safe_content = (content or "").strip()
     if not safe_content:
         return f"{source_type} profile. Empty content."
-    clipped = safe_content[:12000]
+    clipped = safe_content
     prompt = ChatPromptTemplate.from_messages(
         [
             (
@@ -576,7 +576,7 @@ Definitions:
 Decision rules:
 1) If the user is asking "how to do something in BoardPAC" -> manual.
 2) If the user is asking "what does this document/paper say/mean" or to summarize/analyze/extract from an attachment -> paper, but ONLY if a selected paper exists and the query matches that paper profile.
-3) If there is NO selected paper, or the query is not about that selected paper, do NOT choose paper; choose general instead.
+3) If there is NO selected paper, or the query is not about that selected paper, do NOT choose paper. Choose manual if it is about BoardPAC usage; otherwise choose general.
 4) Tie-breaker: If the question is about manipulating a document *inside BoardPAC* (upload, find, open, annotate, permission/share) -> manual.
 5) If uncertain or ambiguous -> manual.
 
@@ -587,7 +587,7 @@ Security / robustness:
             ),
             (
                 "human",
-                "Has selected paper: {has_paper}
+                """Has selected paper: {has_paper}
 
 Query: {query}
 
@@ -595,7 +595,7 @@ Manual profile:
 {manual}
 
 Selected paper profile:
-{paper}",
+{paper}""",
             ),
         ]
     )
@@ -689,6 +689,7 @@ def _route_query_source(query: str, paper_id: str | None = None) -> str:
         query=query,
         manual_profile=(manual_doc.page_content if manual_doc else ""),
         paper_profile=(paper_doc.page_content if paper_doc else ""),
+        has_selected_paper=bool(paper_id),
     )
 
 def _retrieve_manual_documents(query: str, level: int | None = None, k: int = 6):
@@ -719,19 +720,52 @@ def _retrieve_manual_documents(query: str, level: int | None = None, k: int = 6)
             filtered.append(d)
     return filtered or docs
 
+def _invoke_general_llm(question: str, history_messages) -> str:
+    system_prompt = """You are a helpful assistant.
+
+Provide a clear, concise answer to the user's question.
+
+Output Rules:
+- Use valid HTML tags (<h2>, <p>, <ul>, <li>, <strong>).
+- Do not use Markdown.
+- If you don't know the answer, say so plainly.
+"""
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
+    chain = prompt | llm | StrOutputParser()
+    return chain.invoke({"input": question, "chat_history": history_messages})
+
 def invoke_auto_route_and_save(
     session_id: str,
     input_text: str,
     level: int | None = None,
     paper_id: str | None = None,
 ) -> str:
-    save_message(session_id, "human", input_text)
-    history = load_session_history(session_id, max_messages=20)
-
-    standalone_question = _contextualize_question(input_text, history.messages)
-    save_message(session_id, "human_rewritten", standalone_question)
+    base_history = load_session_history(session_id, max_messages=20)
+    standalone_question = _contextualize_question(input_text, base_history.messages)
     route = _route_query_source(standalone_question, paper_id)
-    save_message(session_id, "system", f"route={route}")
+    if route == "paper" and not paper_id:
+        route = "general"
+
+    if route == "paper":
+        route_session_id = f"{session_id}::paper::{paper_id}"
+    else:
+        route_session_id = f"{session_id}::{route}"
+
+    history = load_session_history(route_session_id, max_messages=20)
+    save_message(route_session_id, "human", input_text)
+    save_message(route_session_id, "human_rewritten", standalone_question)
+    save_message(route_session_id, "system", f"route={route}")
+
+    if route == "general":
+        answer = _invoke_general_llm(standalone_question, history.messages)
+        save_message(route_session_id, "ai", answer)
+        return answer
 
     if route == "paper":
         if not paper_id:
@@ -840,7 +874,7 @@ Output Rules:
             "chat_history": history.messages,
         }
     )
-    save_message(session_id, "ai", answer)
+    save_message(route_session_id, "ai", answer)
     print(f"Answer: {answer}")
     return answer
 
@@ -1007,11 +1041,6 @@ Output Rules:
 
 # Load the vector store from disk
 def load_vector_store() -> None:
-    """Initialize or connect to the configured vector store.
-
-    - FAISS: load from local files if present; otherwise create an empty in-memory index.
-    - Pinecone: connect to remote index by name; no local files involved.
-    """
     global vector_db
 
     if VECTOR_DB_PROVIDER == "pinecone":
@@ -1086,7 +1115,6 @@ def load_vector_store() -> None:
 
 
 def load_paper_vector_store() -> None:
-    """Initialize or connect to the dedicated vector store for papers."""
     global paper_vector_db
 
     if PAPER_VECTOR_DB_PROVIDER == "pinecone":
