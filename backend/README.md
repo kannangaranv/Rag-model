@@ -64,6 +64,18 @@ Notes
 - Register with `role` (recommended) or legacy `level`.
 ```
 
+## User Role Matrix Upload Vector DB
+
+User-role matrix uploads (`POST /api/upload-user-roles`) can use a dedicated vector DB separate from the main manual/paper stores.
+
+Set in `backend/.env`:
+
+- `USER_ROLE_VECTOR_DB=faiss|milvus|pinecone`
+- `USER_ROLE_MILVUS_COLLECTION=bp_user_role_collection`
+- `USER_ROLE_PINECONE_INDEX_NAME=bp-user-role-index`
+
+If unset, it defaults to `faiss` for user-role uploads only.
+
 ## Milvus Setup
 
 # download docker-compose.yml

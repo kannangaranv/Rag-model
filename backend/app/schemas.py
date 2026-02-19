@@ -6,6 +6,7 @@ from uuid import UUID
 class QueryRequest(BaseModel):
     query: str
     paper_id: Optional[str] = None
+    role: Optional[str] = None
 
 class QueryResponse(BaseModel):
     response: str
@@ -54,6 +55,19 @@ class PaperMeta(BaseModel):
 
 class PaperListResponse(BaseModel):
     items: List[PaperMeta]
+    total: int
+    page: int
+    page_size: int
+
+class UserRoleFileMeta(BaseModel):
+    id: UUID
+    file_name: str
+    content_type: str
+    file_size_bytes: int
+    uploaded_at: datetime
+
+class UserRoleFileListResponse(BaseModel):
+    items: List[UserRoleFileMeta]
     total: int
     page: int
     page_size: int

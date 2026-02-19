@@ -120,6 +120,111 @@
 </div>
 
 <div class="uploader-card">
+  <h3 class="uploader-title">Upload User Role Matrix</h3>
+
+  <div
+    class="dropzone"
+    [class.dragover]="dragOverUserRole"
+    (dragover)="onUserRoleDragOver($event)"
+    (dragleave)="onUserRoleDragLeave($event)"
+    (drop)="onUserRoleDrop($event)"
+    (click)="userRoleInput.click()"
+    tabindex="0"
+    (keydown.enter)="userRoleInput.click()"
+    aria-label="Upload user-role Excel file. Click or drag and drop."
+  >
+    <div class="dz-icon">
+      <img src="assets/images/pdf.png" alt="Excel Icon" />
+    </div>
+
+    <div class="dz-text">
+      <strong>Upload a User Role Matrix</strong>
+      <span>Drag and drop your file here, or <u>browse</u></span>
+      <small>Only .xlsx - Max 50 MB</small>
+    </div>
+
+    <input
+      #userRoleInput
+      type="file"
+      accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      (change)="onUserRoleFileSelected($event)"
+      hidden
+    />
+  </div>
+
+  <div class="file-row" *ngIf="userRoleFile">
+    <div class="file-meta">
+      <div class="file-name" [title]="userRoleFile.name">{{ userRoleFile.name }}</div>
+      <div class="file-size">{{ formatSize(userRoleFile.size) }}</div>
+    </div>
+    <button class="btn-link" (click)="clearUserRoleFile()" [disabled]="userRoleUploading">Remove</button>
+  </div>
+
+  <div class="progress-wrap" *ngIf="userRoleUploading">
+    <div class="progress-bar">
+      <div class="progress-fill" [style.width.%]="userRoleProgress"></div>
+    </div>
+    <div class="progress-label">{{ userRoleProgress }}%</div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" (click)="uploadUserRole()" [disabled]="!userRoleFile || userRoleUploading">
+      {{ userRoleUploading ? 'Uploading...' : 'Upload User Role Matrix' }}
+    </button>
+    <span class="status success" *ngIf="!userRoleUploading && userRoleMessage && !userRoleError">{{ userRoleMessage }}</span>
+    <span class="status error" *ngIf="!userRoleUploading && userRoleError">{{ userRoleError }}</span>
+  </div>
+</div>
+
+<div class="docs-card">
+  <div class="docs-header">
+    <h4>Stored User Role Files</h4>
+    <div class="docs-controls">
+      <button class="btn btn-secondary" (click)="loadUserRoles(1)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="docs-body" *ngIf="!userRoleLoading; else userRoleLoadingTpl">
+    <div *ngIf="userRoleFiles.length === 0" class="empty">No user role files found.</div>
+
+    <table class="docs-table" *ngIf="userRoleFiles.length > 0">
+      <thead>
+        <tr>
+          <th style="width: 36px;"></th>
+          <th>File name</th>
+          <th>Size</th>
+          <th>Uploaded</th>
+          <th style="width: 160px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let f of userRoleFiles">
+          <td class="icon-cell">
+            <img src="assets/images/pdf.png" alt="Excel" class="row-icon" />
+          </td>
+          <td class="truncate" [title]="f.file_name">{{ f.file_name }}</td>
+          <td>{{ formatSize(f.file_size_bytes) }}</td>
+          <td>{{ f.uploaded_at | date:'medium' }}</td>
+          <td class="actions-cell">
+            <button class="btn btn-text" (click)="deleteUserRoleFile(f)">Delete</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pager" *ngIf="totalUserRoles > pageSizeUserRoles">
+      <button class="btn btn-secondary" (click)="prevUserRolePage()" [disabled]="pageUserRoles === 1">Prev</button>
+      <span>Page {{ pageUserRoles }} / {{ totalUserRolePages }}</span>
+      <button class="btn btn-secondary" (click)="nextUserRolePage()" [disabled]="pageUserRoles >= totalUserRolePages">Next</button>
+    </div>
+  </div>
+
+  <ng-template #userRoleLoadingTpl>
+    <div class="loading-row">Loading user role files...</div>
+  </ng-template>
+</div>
+
+<div class="uploader-card">
   <h3 class="uploader-title">Upload Papers (Admin)</h3>
 
   <div

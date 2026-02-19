@@ -57,6 +57,9 @@ MILVUS_REQUIRE_AUTH = os.getenv("MILVUS_REQUIRE_AUTH", "true").lower() not in {"
 PAPER_VECTOR_DB_PROVIDER = os.getenv("PAPER_VECTOR_DB", VECTOR_DB_PROVIDER).lower()
 PAPER_PINECONE_INDEX_NAME = os.getenv("PAPER_PINECONE_INDEX_NAME", "bp-paper-index")
 PAPER_MILVUS_COLLECTION = os.getenv("PAPER_MILVUS_COLLECTION", "bp_paper_collection")
+USER_ROLE_VECTOR_DB_PROVIDER = os.getenv("USER_ROLE_VECTOR_DB", "faiss").lower()
+USER_ROLE_PINECONE_INDEX_NAME = os.getenv("USER_ROLE_PINECONE_INDEX_NAME", "bp-user-role-index")
+USER_ROLE_MILVUS_COLLECTION = os.getenv("USER_ROLE_MILVUS_COLLECTION", "bp_user_role_collection")
 MANUAL_PROFILE_VECTOR_DB_PROVIDER = os.getenv("MANUAL_PROFILE_VECTOR_DB", VECTOR_DB_PROVIDER).lower()
 PAPER_PROFILE_VECTOR_DB_PROVIDER = os.getenv("PAPER_PROFILE_VECTOR_DB", PAPER_VECTOR_DB_PROVIDER).lower()
 MANUAL_PROFILE_PINECONE_INDEX_NAME = os.getenv("MANUAL_PROFILE_PINECONE_INDEX_NAME", "bp-manual-profile-index")
@@ -82,6 +85,15 @@ PAPER_RERANK_MAX_DOC_CHARS = max(
     256,
     int(os.getenv("PAPER_RERANK_MAX_DOC_CHARS", "2500")),
 )
+PERMISSION_RERANK_CANDIDATES = max(
+    1,
+    int(os.getenv("PERMISSION_RERANK_CANDIDATES", "100")),
+)
+PERMISSION_RERANK_MAX_DOC_CHARS = max(
+    256,
+    int(os.getenv("PERMISSION_RERANK_MAX_DOC_CHARS", "2500")),
+)
+
 
 PAPER_FALLBACK_JUDGE_ENABLED = os.getenv("PAPER_FALLBACK_JUDGE_ENABLED", "true").lower() not in {"0", "false", "no", "off"}
 PAPER_FALLBACK_MIN_DOCS = max(1, int(os.getenv("PAPER_FALLBACK_MIN_DOCS", "2")))
@@ -92,18 +104,67 @@ PAPER_CHUNK_SIZE = max(50, int(os.getenv("PAPER_CHUNK_SIZE", "100")))
 PAPER_CHUNK_OVERLAP = max(0, int(os.getenv("PAPER_CHUNK_OVERLAP", "20")))
 MANUAL_RETRIEVAL_K = max(1, int(os.getenv("MANUAL_RETRIEVAL_K", "6")))
 PAPER_RETRIEVAL_K = max(1, int(os.getenv("PAPER_RETRIEVAL_K", "10")))
-
+PERMISSION_RETRIEVAL_K = max(1, int(os.getenv("PERMISSION_RETRIEVAL_K", "50")))
 VECTOR_DIR = Path("vector_store")
 PAPER_VECTOR_DIR = Path("paper_vector_store")
+USER_ROLE_VECTOR_DIR = Path("user_role_vector_store")
 MANUAL_PROFILE_VECTOR_DIR = Path("manual_profile_vector_store")
 PAPER_PROFILE_VECTOR_DIR = Path("paper_profile_vector_store")
 
 vector_db: Optional[object] = None
 paper_vector_db: Optional[object] = None
+user_role_vector_db: Optional[object] = None
 manual_profile_vector_db: Optional[object] = None
 paper_profile_vector_db: Optional[object] = None
 _cross_encoder: Optional[object] = None
 _cross_encoder_failed = False
+
+_PERMISSION_QUERY_PHRASES = (
+    "who can",
+    "who has access",
+    "who have access",
+    "who is allowed",
+    "who is not allowed",
+    "is allowed to",
+    "not allowed to",
+    "can perform",
+    "cannot perform",
+    "can do",
+    "cannot do",
+)
+
+_PERMISSION_QUERY_TERMS = {
+    "permission",
+    "permissions",
+    "privilege",
+    "privileges",
+    "access",
+    "role",
+    "roles",
+    "allowed",
+    "denied",
+    "notallow",
+    "notallowed",
+    "authorize",
+    "authorized",
+    "authorised",
+}
+
+
+def _permission_query_keyword_fallback(query: str) -> bool:
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+
+    if any(phrase in q for phrase in _PERMISSION_QUERY_PHRASES):
+        return True
+
+    words = set(re.findall(r"[a-z0-9_]+", q))
+    if not words:
+        return False
+
+    term_hits = sum(1 for t in _PERMISSION_QUERY_TERMS if t in words)
+    return term_hits >= 1
 
 
 def _milvus_connection_args() -> dict:
@@ -358,6 +419,26 @@ def upload_papers_to_vector_store(documents, uuids):
         print("Papers uploaded to vector store successfully.")
     except Exception as e:
         print(f"Error uploading papers to vector store: {e}")
+
+# Upload user-role matrices to a dedicated vector store.
+def upload_user_roles_to_vector_store(documents, uuids):
+    try:
+        global user_role_vector_db
+        if user_role_vector_db is None:
+            load_user_role_vector_store()
+        if user_role_vector_db is None:
+            raise RuntimeError("User-role vector store is not initialized. Upload aborted.")
+
+        if USER_ROLE_VECTOR_DB_PROVIDER in ("pinecone", "milvus"):
+            user_role_vector_db.add_documents(documents=documents, ids=uuids)
+        else:
+            user_role_vector_db.add_documents(documents=documents, ids=uuids)
+            user_role_vector_db.save_local(str(USER_ROLE_VECTOR_DIR))
+            load_user_role_vector_store()
+
+        print("User-role documents uploaded to dedicated vector store successfully.")
+    except Exception as e:
+        print(f"Error uploading user-role documents to vector store: {e}")
 
 # Delete papers from the dedicated paper vector store
 def delete_papers_from_vector_store(doc_id):
@@ -686,6 +767,87 @@ Rules:
     )
     return (standalone_question or "").strip() or input_text
 
+
+def _contextualize_question_by_route(
+    input_text: str,
+    chat_history,
+    route: str = "manual",
+    role: str | None = None,
+) -> str:
+    route_key = (route or "manual").strip().lower()
+    print(f"Contextualizing question for route: {route_key}")
+    if route_key == "manual":
+        print("Using manual contextualization prompt.")
+        contextualize_q_system_prompt = """Rewrite the user’s latest message into a concise, standalone question/message about using the BoardPAC product (UI steps, features, setup, roles/permissions, workflows, troubleshooting, importing/uploading/sharing/annotating inside the app).
+
+Use chat history only to resolve references in the latest message.
+Ignore low-information or boilerplate messages in history, including:
+- Acknowledgments: "ok", "okay", "thanks", "thank you", "noted"
+- Apologies/softeners: "sorry", "apologies"
+- Generic refusals/outcomes: "Out of Scope", "Not Enough Information", "I couldn't find"
+- Auto-responses/placeholders: "processing...", "please wait", "let me check"
+- Meta/system chatter: "as an AI", policy blurbs
+- Empty/near-empty content: emojis, lone punctuation
+- Repeated echoes of prior answers without new facts
+
+Rules:
+- If the latest message is already standalone, return it UNCHANGED.
+- If the latest message is a greeting or simple acknowledgment ("hi", "hello", "thanks"), return it UNCHANGED.
+- Preserve entities, product terms, numbers, dates, and constraints.
+- Do NOT answer; return only the rewritten question text(no quotes, no commentary).
+"""
+
+    elif route_key == "paper":
+        contextualize_q_system_prompt = """Rewrite the user’s latest message into a concise, standalone question/message.
+
+Use chat history only to resolve references in the latest message.
+Ignore low-information or boilerplate messages in history, including:
+- Acknowledgments: "ok", "okay", "thanks", "thank you", "noted"
+- Apologies/softeners: "sorry", "apologies"
+- Generic refusals/outcomes: "Out of Scope", "Not Enough Information", "I couldn't find"
+- Auto-responses/placeholders: "processing...", "please wait", "let me check"
+- Meta/system chatter: "as an AI", policy blurbs
+- Empty/near-empty content: emojis, lone punctuation
+- Repeated echoes of prior answers without new facts
+
+Rules:
+- If the latest message is already standalone, return it UNCHANGED.
+- If the latest message is a greeting or simple acknowledgment ("hi", "hello", "thanks"), return it UNCHANGED.
+- Preserve entities, product terms, numbers, dates, and constraints.
+- Do NOT answer; return only the rewritten question text(no quotes, no commentary).
+"""
+    else:
+        contextualize_q_system_prompt = """Rewrite the user's latest message into a concise, standalone permission/access question.
+
+Use chat history only to resolve references in the latest message.
+Ignore low-information or boilerplate messages in history.
+
+Current User Role: {role}
+
+Rules:
+- Preserve role names, action names, allow/deny wording, app/sheet/context terms, and constraints.
+- Emphasize that this is a role-permission/access question.
+- If the latest message is already standalone, return it unchanged.
+- Do NOT answer; return only the rewritten question text (no quotes, no commentary).
+"""
+    print(f"Using contextualization system prompt:\n{contextualize_q_system_prompt}\n---")
+    contextualize_q_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", contextualize_q_system_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
+    rewrite_chain = contextualize_q_prompt | llm | StrOutputParser()
+    standalone_question = rewrite_chain.invoke(
+        {
+            "input": input_text,
+            "chat_history": chat_history,
+            "role": (role or "unknown"),
+        }
+    )
+    return (standalone_question or "").strip() or input_text
+
 def _search_profile_best(store: object, provider: str, query: str):
     if store is None:
         return None, 0.0
@@ -975,6 +1137,123 @@ def _retrieve_manual_documents(query: str, level: int | None = None, k: int = 6)
         max_doc_chars=MANUAL_RERANK_MAX_DOC_CHARS,
     )
 
+
+def _is_permission_access_query(query: str) -> bool:
+    q = (query or "").strip()
+    if not q:
+        return False
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are an intent classifier for BoardPAC manual-route retrieval.
+
+Classify whether the user question is primarily about:
+- roles/permissions/privileges/access rights (who can do what) -> output: permission
+- general BoardPAC manual/help usage not centered on access rights -> output: manual
+
+Output EXACTLY one lowercase word:
+permission
+manual
+""",
+            ),
+            ("human", "Question: {query}"),
+        ]
+    )
+
+    try:
+        decision = (prompt | llm | StrOutputParser()).invoke({"query": q})
+        out = (decision or "").strip().lower()
+        print(f"Permission intent decision output: {out}")
+        return "permission" in out
+    except Exception as e:
+        print(f"Permission intent classifier failed, using keyword fallback: {e}")
+        return _permission_query_keyword_fallback(q)
+
+
+def _retrieve_user_role_documents(query: str, k: int =50):
+    global user_role_vector_db
+    if user_role_vector_db is None:
+        load_user_role_vector_store()
+    if user_role_vector_db is None:
+        return []
+
+    candidate_k = max(k, MANUAL_RERANK_CANDIDATES) if RERANK_ENABLED else k
+
+    try:
+        docs = user_role_vector_db.similarity_search(query=query, k=candidate_k)
+    except Exception:
+        return []
+
+    return _rerank_documents(
+        query,
+        docs,
+        top_k=k,
+        max_doc_chars=MANUAL_RERANK_MAX_DOC_CHARS,
+    )
+
+
+def _normalize_role_key(role: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (role or "").strip().lower())
+
+
+def _filter_docs_by_role(docs: list, role: str | None) -> list:
+    role_key = _normalize_role_key(role)
+    if not role_key:
+        return docs
+    filtered = []
+    for d in docs or []:
+        meta_role = ""
+        try:
+            meta_role = str((d.metadata or {}).get("role", ""))
+        except Exception:
+            meta_role = ""
+        if _normalize_role_key(meta_role) == role_key:
+            filtered.append(d)
+    return filtered
+
+
+def _retrieve_user_role_documents_for_role(query: str, role: str | None, k: int = 6):
+    global user_role_vector_db
+    if user_role_vector_db is None:
+        load_user_role_vector_store()
+    if user_role_vector_db is None:
+        return []
+
+    candidate_k = max(k, MANUAL_RERANK_CANDIDATES) if RERANK_ENABLED else k
+    role_value = (role or "").strip()
+    docs = []
+
+    # Use native Milvus metadata filtering when available.
+    if USER_ROLE_VECTOR_DB_PROVIDER == "milvus" and role_value:
+        try:
+            role_expr = role_value.replace('"', '\\"')
+            docs = user_role_vector_db.similarity_search(
+                query=query,
+                k=candidate_k,
+                expr=f'role == "{role_expr}"',
+            )
+        except Exception:
+            docs = []
+
+    # Fallback path (and non-Milvus providers): retrieve then app-side filter.
+    if not docs:
+        try:
+            docs = user_role_vector_db.similarity_search(query=query, k=candidate_k)
+        except Exception:
+            return []
+        docs = _filter_docs_by_role(docs, role)
+
+    if not docs:
+        return []
+    return _rerank_documents(
+        query,
+        docs,
+        top_k=k,
+        max_doc_chars=MANUAL_RERANK_MAX_DOC_CHARS,
+    )
+
 def _invoke_general_llm(question: str, history_messages) -> str:
     system_prompt = """You are a helpful assistant.
 
@@ -1066,6 +1345,7 @@ def invoke_auto_route_and_save(
     input_text: str,
     level: int | None = None,
     paper_id: str | None = None,
+    role: str | None = None,
 ) -> str:
     # print(f"Invoking auto-routing for session {session_id} with input: {input_text} and paper_id: {paper_id}")
     # base_history = load_session_history(session_id, max_messages=20)
@@ -1142,13 +1422,53 @@ Output Rules:
 - Only return the final refined answer.
 
 """
+    permission_system_prompt = """
+You are a permission and access-control assistant for BoardPAC, powered by Retrieval-Augmented Generation (RAG).
+
+STRICT SCOPE:
+- You must answer ONLY from user-role matrix context about permissions, privileges, access rights, and role capabilities.
+- If the retrieved context does not contain enough permission data, return Not Enough Information.
+- Do not provide UI guidance unless it is directly part of the retrieved permission context.
+
+Retrieved Context (User-Role Matrix Chunks): {context}
+
+Internal Steps:
+1. Identify role(s), action(s), and allow/deny status from retrieved context.
+2. Answer exactly what was asked (for example: who can do X, can role Y do X, who has access to Z).
+3. If multiple roles apply, provide a concise list.
+4. If conflicting evidence appears, state that clearly.
+
+Response Policies:
+- Greetings / small talk:
+  Return:
+  <p>Hello!. What permission or access question can I help with?</p>
+
+- If retrieved context does not include relevant permission evidence for the asked role/action:
+  Return:
+  <h2>Access Denied</h2>
+  <p>Based on the available user-role matrix context, this role cannot perform that action and does not have the required privilege.</p>
+
+- No hallucinations: Never invent role permissions not present in retrieved context.
+
+Output Rules:
+- Keep the answer short and specific to permissions/access.
+- Use valid HTML tags (<h2>, <p>, <ul>, <li>, <strong>) only.
+- Do not use Markdown.
+- Only return the final refined answer.
+"""
     # Priority rule: when a paper is selected, always try paper flow first.
     if paper_id:
+        print(f"Paper ID {paper_id} detected, attempting paper route first.")
         paper_session_id = f"{session_id}::paper::{paper_id}"
         paper_history = load_session_history(paper_session_id, max_messages=20)
-        standalone_question = _contextualize_question(input_text, paper_history.messages)
-
+        standalone_question = _contextualize_question_by_route(
+            input_text,
+            paper_history.messages,
+            route="paper",
+        )
+        save_message(paper_session_id, "human_rewritten", standalone_question)
         paper_docs = retrieve_paper_documents(standalone_question, paper_id=paper_id, k=PAPER_RETRIEVAL_K)
+        print(f"Retrieved {len(paper_docs)} documents for paper route with paper ID {paper_id}.")
         if paper_docs:
             paper_prompt = ChatPromptTemplate.from_messages(
                 [
@@ -1179,12 +1499,40 @@ Output Rules:
     # Manual route (default or fallback).
     manual_session_id = f"{session_id}::manual"
     manual_history = load_session_history(manual_session_id, max_messages=20)
-    standalone_question = _contextualize_question(input_text, manual_history.messages)
+    standalone_question = _contextualize_question_by_route(
+        input_text,
+        manual_history.messages,
+        route="manual",
+    )
+    save_message(manual_session_id, "system", "route=manual")
+    save_message(manual_session_id, "human_rewritten", standalone_question)
+
+    use_user_role_store = _is_permission_access_query(standalone_question)
+    if use_user_role_store:
+        standalone_question = _contextualize_question_by_route(
+            input_text,
+            manual_history.messages,
+            route="permission",
+            role=role,
+        )
+        docs = _retrieve_user_role_documents_for_role(
+            standalone_question,
+            role=role,
+            k=PERMISSION_RETRIEVAL_K,
+        )
+        print(f"Manual route retrieval source: user-role vector store (role filter={role})")
+        if not docs:
+            answer = (
+                "<h2>Access Denied</h2>"
+                "<p>Based on the available user-role matrix context, this role cannot perform that action and does not have the required privilege.</p>"
+            )
+            save_message(manual_session_id, "ai", answer)
+            return answer
+    else:
+        docs = _retrieve_manual_documents(standalone_question, level=level, k=MANUAL_RETRIEVAL_K)
+        print("Manual route retrieval source: manual vector store")
     save_message(manual_session_id, "human", input_text)
     save_message(manual_session_id, "human_rewritten", standalone_question)
-    # save_message(manual_session_id, "system", "route=manual")
-
-    docs = _retrieve_manual_documents(standalone_question, level=level, k=MANUAL_RETRIEVAL_K)
     if not docs:
         answer = (
             "<h2>Not Enough Information</h2>"
@@ -1193,9 +1541,10 @@ Output Rules:
         save_message(manual_session_id, "ai", answer)
         return answer
 
+    selected_system_prompt = permission_system_prompt if use_user_role_store else manual_system_prompt
     manual_prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", manual_system_prompt),
+            ("system", selected_system_prompt),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
         ]
@@ -1510,6 +1859,74 @@ def load_paper_vector_store() -> None:
         except Exception as e:
             print(f"Failed initializing empty paper FAISS index: {e}")
             paper_vector_db = None
+
+def load_user_role_vector_store() -> None:
+    global user_role_vector_db
+
+    if USER_ROLE_VECTOR_DB_PROVIDER == "pinecone":
+        if Pinecone is None or PineconeVectorStore is None:
+            print("Pinecone dependencies are not available for user-role vector store.")
+            user_role_vector_db = None
+            return
+        try:
+            _pc = Pinecone(api_key=PINECONE_API_KEY)
+            user_role_vector_db = PineconeVectorStore(
+                index_name=USER_ROLE_PINECONE_INDEX_NAME,
+                embedding=embeddings,
+            )
+            print(f"Connected to user-role Pinecone index '{USER_ROLE_PINECONE_INDEX_NAME}'.")
+        except Exception as e:  # noqa: BLE001
+            print(f"Failed connecting user-role vector store to Pinecone: {e}")
+            user_role_vector_db = None
+        return
+
+    if USER_ROLE_VECTOR_DB_PROVIDER == "milvus":
+        if MilvusVectorStore is None:
+            print("Milvus dependencies are not available for user-role vector store.")
+            user_role_vector_db = None
+            return
+        try:
+            user_role_vector_db = MilvusVectorStore(
+                embedding_function=embeddings,
+                connection_args=_milvus_connection_args(),
+                collection_name=USER_ROLE_MILVUS_COLLECTION,
+            )
+            print(f"Connected to user-role Milvus collection '{USER_ROLE_MILVUS_COLLECTION}' at '{MILVUS_URI}'.")
+        except Exception as e:  # noqa: BLE001
+            print(f"Failed connecting user-role vector store to Milvus: {e}")
+            user_role_vector_db = None
+        return
+
+    if FAISS is None or _faiss is None:
+        print("FAISS dependencies not available for user-role vector store.")
+        user_role_vector_db = None
+        return
+
+    if (USER_ROLE_VECTOR_DIR / "index.faiss").exists() and (USER_ROLE_VECTOR_DIR / "index.pkl").exists():
+        try:
+            user_role_vector_db = FAISS.load_local(
+                folder_path=str(USER_ROLE_VECTOR_DIR),
+                embeddings=embeddings,
+                allow_dangerous_deserialization=True,
+            )
+            print(f"User-role FAISS VectorStore loaded from {USER_ROLE_VECTOR_DIR}")
+        except Exception as e:  # noqa: BLE001
+            print(f"Failed loading user-role FAISS store from disk: {e}")
+            user_role_vector_db = None
+    else:
+        try:
+            dim = len(embeddings.embed_query("hello world"))
+            index = _faiss.IndexFlatL2(dim)
+            user_role_vector_db = FAISS(
+                embedding_function=embeddings,
+                index=index,
+                docstore=InMemoryDocstore(),
+                index_to_docstore_id={},
+            )
+            print("Initialized empty user-role FAISS vector store (no local files present).")
+        except Exception as e:
+            print(f"Failed initializing empty user-role FAISS index: {e}")
+            user_role_vector_db = None
 
 def load_manual_profile_vector_store() -> None:
     global manual_profile_vector_db

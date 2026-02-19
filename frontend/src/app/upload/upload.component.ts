@@ -8,7 +8,9 @@ import {
   VideoMeta,
   VideoListResponse,
   PaperMeta,
-  PaperListResponse
+  PaperListResponse,
+  UserRoleFileMeta,
+  UserRoleFileListResponse
 } from '../services/open-ai-api.service';
 
 @Component({
@@ -40,6 +42,19 @@ export class UploadComponent implements OnInit {
   pageSizeDocs = 10;
   totalDocs = 0;
   qDocs = '';
+
+  userRoleFile: File | null = null;
+  userRoleUploading = false;
+  userRoleProgress = 0;
+  userRoleMessage = '';
+  userRoleError = '';
+  dragOverUserRole = false;
+
+  userRoleFiles: UserRoleFileMeta[] = [];
+  userRoleLoading = false;
+  pageUserRoles = 1;
+  pageSizeUserRoles = 10;
+  totalUserRoles = 0;
 
   paperLevel: number = 2;
   paperFile: File | null = null;
@@ -81,6 +96,7 @@ export class UploadComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadDocuments(1);
+    this.loadUserRoles(1);
     this.loadPapers(1);
     this.loadVideos(1);
   }
@@ -205,6 +221,127 @@ export class UploadComponent implements OnInit {
       error: () => {
         this.pdfUploading = false;
         alert('Failed to delete document. Please try again.');
+      }
+    });
+  }
+
+  onUserRoleFileSelected(evt: Event) {
+    const input = evt.target as HTMLInputElement;
+    const picked = input.files?.[0] || null;
+    if (picked) this.setUserRoleFile(picked);
+    if (input) input.value = '';
+  }
+
+  onUserRoleDragOver(e: DragEvent) {
+    e.preventDefault();
+    this.dragOverUserRole = true;
+  }
+
+  onUserRoleDragLeave(_: DragEvent) {
+    this.dragOverUserRole = false;
+  }
+
+  onUserRoleDrop(e: DragEvent) {
+    e.preventDefault();
+    this.dragOverUserRole = false;
+    const dropped = e.dataTransfer?.files?.[0] || null;
+    if (dropped) this.setUserRoleFile(dropped);
+  }
+
+  setUserRoleFile(f: File) {
+    this.userRoleMessage = '';
+    this.userRoleError = '';
+
+    const byType = f.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    const byExt = f.name.toLowerCase().endsWith('.xlsx');
+    if (!byType && !byExt) {
+      this.userRoleError = 'Only .xlsx files are allowed.';
+      this.userRoleFile = null;
+      return;
+    }
+
+    const MAX_MB = 50;
+    if (f.size > MAX_MB * 1024 * 1024) {
+      this.userRoleError = `File is too large. Max ${MAX_MB} MB.`;
+      this.userRoleFile = null;
+      return;
+    }
+
+    this.userRoleFile = f;
+  }
+
+  clearUserRoleFile() {
+    if (this.userRoleUploading) return;
+    this.userRoleFile = null;
+    this.userRoleMessage = '';
+    this.userRoleError = '';
+    this.userRoleProgress = 0;
+  }
+
+  uploadUserRole() {
+    if (!this.userRoleFile || this.userRoleUploading) return;
+    this.userRoleUploading = true;
+    this.userRoleProgress = 0;
+    this.userRoleMessage = '';
+    this.userRoleError = '';
+
+    this.api.uploadUserRoleWithProgress(this.userRoleFile).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.UploadProgress && event.total) {
+          this.userRoleProgress = Math.round((event.loaded / event.total) * 100);
+        } else if (event.type === HttpEventType.Response) {
+          this.userRoleUploading = false;
+          this.userRoleMessage = event.body?.message ?? 'Uploaded.';
+          this.userRoleFile = null;
+          this.loadUserRoles(1);
+        }
+      },
+      error: () => {
+        this.userRoleUploading = false;
+        this.userRoleError = 'Upload failed. Please try again.';
+      },
+    });
+  }
+
+  loadUserRoles(page: number = this.pageUserRoles) {
+    this.userRoleLoading = true;
+    this.api.getUserRoles(page, this.pageSizeUserRoles).subscribe({
+      next: (res: UserRoleFileListResponse) => {
+        this.userRoleFiles = res.items || [];
+        this.totalUserRoles = res.total || 0;
+        this.pageUserRoles = res.page || page;
+        this.pageSizeUserRoles = res.page_size || this.pageSizeUserRoles;
+        this.userRoleLoading = false;
+      },
+      error: () => {
+        this.userRoleFiles = [];
+        this.totalUserRoles = 0;
+        this.userRoleLoading = false;
+      }
+    });
+  }
+
+  prevUserRolePage() {
+    if (this.pageUserRoles > 1) this.loadUserRoles(this.pageUserRoles - 1);
+  }
+
+  nextUserRolePage() {
+    const maxPage = Math.max(1, Math.ceil(this.totalUserRoles / this.pageSizeUserRoles));
+    if (this.pageUserRoles < maxPage) this.loadUserRoles(this.pageUserRoles + 1);
+  }
+
+  deleteUserRoleFile(f: UserRoleFileMeta) {
+    if (this.userRoleUploading) return;
+    if (!confirm(`Delete user role file "${f.file_name}"? This action cannot be undone.`)) return;
+    this.userRoleUploading = true;
+    this.api.userRoleDeleteUrl(f.id).subscribe({
+      next: () => {
+        this.userRoleUploading = false;
+        this.loadUserRoles(this.pageUserRoles);
+      },
+      error: () => {
+        this.userRoleUploading = false;
+        alert('Failed to delete user role file. Please try again.');
       }
     });
   }
@@ -509,6 +646,11 @@ export class UploadComponent implements OnInit {
   get totalPaperPages(): number {
     if (!this.totalPapers || !this.pageSizePapers) return 1;
     return Math.max(1, Math.ceil(this.totalPapers / this.pageSizePapers));
+  }
+
+  get totalUserRolePages(): number {
+    if (!this.totalUserRoles || !this.pageSizeUserRoles) return 1;
+    return Math.max(1, Math.ceil(this.totalUserRoles / this.pageSizeUserRoles));
   }
 
   roleName(level?: number): string {

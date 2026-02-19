@@ -19,6 +19,8 @@ from app.schemas import (
     PaperListResponse,
     QueryRequest,
     QueryResponse,
+    UserRoleFileListResponse,
+    UserRoleFileMeta,
     VideoListResponse,
     VideoMeta,
     UploadDocumentResponse,
@@ -36,6 +38,7 @@ from app.utils import (
     create_documents_from_chunks,
     create_documents_from_vector_sentences,
     upload_documents_to_vector_store,
+    upload_user_roles_to_vector_store,
     upload_papers_to_vector_store,
     invoke_auto_route_and_save,
     delete_documents_from_vector_store,
@@ -57,6 +60,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.security import get_current_user, require_upload_permission
 from app.models import User
 from app.db_utils import upsert_knowledge_profile, delete_knowledge_profile
+from app.user_roles import level_code_to_role
 
 router = APIRouter()
 
@@ -64,7 +68,8 @@ router = APIRouter()
 @router.post("/query/{level}", response_model=QueryResponse, status_code=status.HTTP_200_OK)
 async def query_documents(level: int, payload: QueryRequest, current_user: User = Depends(get_current_user)):
     username = current_user.Username
-    print(f"Received query request: username={username}, level={level}, paper_id={payload.paper_id}")
+    effective_role = level_code_to_role(current_user.Level)
+    print(f"Received query request: username={username}, level={level}, role={effective_role}, paper_id={payload.paper_id}")
     if level < 1 or level > 6:
         raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
     if not payload.query.strip():
@@ -84,6 +89,7 @@ async def query_documents(level: int, payload: QueryRequest, current_user: User 
             payload.query,
             level,
             paper_id=paper_id,
+            role=effective_role,
         )
         return QueryResponse(response=response)
     except Exception as e:
@@ -97,7 +103,7 @@ async def query_documents(payload: QueryRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     paper_id = (payload.paper_id or "").strip() or None
-    print(f"Received query request: username={username}, paper_id={paper_id}")
+    print(f"Received query request: username={username}, role={payload.role}, paper_id={paper_id}")
     if paper_id:
         with SessionLocal() as db:
             exists = db.execute(
@@ -113,6 +119,7 @@ async def query_documents(payload: QueryRequest):
             payload.query,
             level=None,
             paper_id=paper_id,
+            role=(payload.role or "").strip() or None,
         )
         return QueryResponse(response=response)
     except Exception as e:
@@ -403,7 +410,7 @@ async def upload_user_roles(file: UploadFile = File(...), _: str = Depends(requi
             db.commit()
 
         documents, uuids = create_documents_from_vector_sentences(records)
-        upload_documents_to_vector_store(documents, uuids)
+        upload_user_roles_to_vector_store(documents, uuids)
 
         return UploadDocumentResponse(
             message="User roles uploaded to vector store.",
@@ -906,6 +913,44 @@ def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # API to delete user role files
+@router.get("/user-roles", response_model=UserRoleFileListResponse, status_code=status.HTTP_200_OK)
+def list_user_role_files(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    _: str = Depends(require_upload_permission()),
+):
+    offset = (page - 1) * page_size
+    with SessionLocal() as db:
+        total = db.execute(text("SELECT COUNT(*) AS cnt FROM dbo.UserRoleFiles")).scalar_one()
+
+        rows = db.execute(
+            text("""
+                SELECT
+                    Id,
+                    FileName,
+                    ContentType,
+                    FileSizeBytes,
+                    UploadedAt
+                FROM dbo.UserRoleFiles
+                ORDER BY UploadedAt DESC
+                OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+            """),
+            {"offset": offset, "limit": page_size}
+        ).all()
+
+    items = [
+        UserRoleFileMeta(
+            id=row.Id,
+            file_name=row.FileName,
+            content_type=row.ContentType,
+            file_size_bytes=row.FileSizeBytes,
+            uploaded_at=row.UploadedAt,
+        )
+        for row in rows
+    ]
+
+    return UserRoleFileListResponse(items=items, total=total, page=page, page_size=page_size)
+
 @router.delete("/user-roles/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user_role_file(file_id: str, _: str = Depends(require_upload_permission())):
     file_id = (file_id or "").strip()

@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { environment } from 'src/environments/enviornment';
 import { HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { AuthService } from '../auth/auth.service';
 
 export interface DocumentMeta {
   id: string;
@@ -58,6 +59,21 @@ export interface PaperListResponse {
   total: number;
 }
 
+export interface UserRoleFileMeta {
+  id: string;
+  file_name: string;
+  content_type: string;
+  file_size_bytes: number;
+  uploaded_at: string;
+}
+
+export interface UserRoleFileListResponse {
+  items: UserRoleFileMeta[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -65,11 +81,13 @@ export class OpenAiApiService {
 
   private apiUrl = environment.apiUrl; 
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient, private auth: AuthService) { }
 
   public sendMessage(message: string, paperId?: string | null) {
     const payload: any = { query: message };
     if (paperId) payload.paper_id = paperId;
+    const role = this.auth.getStoredUser()?.role;
+    if (role) payload.role = role;
     return this.http.post<any>(`${this.apiUrl}/query`, payload);
   }
 
@@ -165,6 +183,24 @@ export class OpenAiApiService {
 
   paperDeleteUrl(id: string) {
     return this.http.delete(`${this.apiUrl}/papers/${id}`);
+  }
+
+  uploadUserRoleWithProgress(file: File): Observable<HttpEvent<any>> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<any>(`${this.apiUrl}/upload-user-roles`, form, {
+      reportProgress: true,
+      observe: 'events',
+    });
+  }
+
+  getUserRoles(page = 1, pageSize = 10): Observable<UserRoleFileListResponse> {
+    const params = { page, page_size: pageSize };
+    return this.http.get<UserRoleFileListResponse>(`${this.apiUrl}/user-roles`, { params: params as any });
+  }
+
+  userRoleDeleteUrl(id: string) {
+    return this.http.delete(`${this.apiUrl}/user-roles/${id}`);
   }
 
 }
