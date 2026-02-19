@@ -44,6 +44,10 @@ from app.utils import (
     upload_paper_profile_to_vector_store,
     delete_manual_profile_from_vector_store,
     delete_paper_profile_from_vector_store,
+    MANUAL_CHUNK_SIZE,
+    MANUAL_CHUNK_OVERLAP,
+    PAPER_CHUNK_SIZE,
+    PAPER_CHUNK_OVERLAP,
 )
 from app.video_utils import get_transcription_from_video
 from app.file_utils import _parse_range_header
@@ -60,6 +64,7 @@ router = APIRouter()
 @router.post("/query/{level}", response_model=QueryResponse, status_code=status.HTTP_200_OK)
 async def query_documents(level: int, payload: QueryRequest, current_user: User = Depends(get_current_user)):
     username = current_user.Username
+    print(f"Received query request: username={username}, level={level}, paper_id={payload.paper_id}")
     if level < 1 or level > 6:
         raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
     if not payload.query.strip():
@@ -83,6 +88,36 @@ async def query_documents(level: int, payload: QueryRequest, current_user: User 
         return QueryResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/query", response_model=QueryResponse, status_code=status.HTTP_200_OK)
+async def query_documents(payload: QueryRequest):
+    username = "secretary"
+
+    if not payload.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
+    paper_id = (payload.paper_id or "").strip() or None
+    print(f"Received query request: username={username}, paper_id={paper_id}")
+    if paper_id:
+        with SessionLocal() as db:
+            exists = db.execute(
+                text("SELECT 1 FROM dbo.Papers WHERE Id = CONVERT(uniqueidentifier, :id)"),
+                {"id": paper_id},
+            ).scalar()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+    try:
+        response = invoke_auto_route_and_save(
+            username,
+            payload.query,
+            level=None,
+            paper_id=paper_id,
+        )
+        return QueryResponse(response=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # Upload document to vector store and sql server
 @router.post("/upload-documents/{level}", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -125,7 +160,11 @@ async def upload_documents(level: int, file: UploadFile = File(...), _: str = De
                 }
             )
             db.commit()
-        chunks = create_chunks_from_text(md_text)
+        chunks = create_chunks_from_text(
+            md_text,
+            chunk_size=MANUAL_CHUNK_SIZE,
+            overlap=MANUAL_CHUNK_OVERLAP,
+        )
         documents, uuids = create_documents_from_chunks(chunks, doc_id, level)
         upload_documents_to_vector_store(documents, uuids)
         profile_text = upload_manual_profile_to_vector_store(
@@ -201,7 +240,11 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
             )
             db.commit()
 
-        chunks = create_chunks_from_text(transcription)
+        chunks = create_chunks_from_text(
+            transcription,
+            chunk_size=MANUAL_CHUNK_SIZE,
+            overlap=MANUAL_CHUNK_OVERLAP,
+        )
         documents, uuids = create_documents_from_chunks(chunks, video_id, level)
         upload_documents_to_vector_store(documents, uuids)
         upload_manual_profile_to_vector_store(
@@ -263,7 +306,11 @@ async def upload_papers(level: int, file: UploadFile = File(...), _: str = Depen
             )
             db.commit()
 
-        chunks = create_chunks_from_text(md_text)
+        chunks = create_chunks_from_text(
+            md_text,
+            chunk_size=PAPER_CHUNK_SIZE,
+            overlap=PAPER_CHUNK_OVERLAP,
+        )
         documents, uuids = create_documents_from_chunks(chunks, paper_id, level)
         upload_papers_to_vector_store(documents, uuids)
         profile_text = upload_paper_profile_to_vector_store(

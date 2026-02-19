@@ -1,6 +1,5 @@
 import { Component, ElementRef, ViewChild } from '@angular/core';
 import { OpenAiApiService } from '../services/open-ai-api.service';
-import { AuthService } from '../auth/auth.service';
 
 type Role = 'user' | 'assistant';
 interface ChatMessage {
@@ -21,7 +20,7 @@ export class ChatbotComponent {
   isLoading = false;
   chatMessages: ChatMessage[] = [];
 
-  constructor(private openAiApiService: OpenAiApiService, private auth: AuthService) {}
+  constructor(private openAiApiService: OpenAiApiService) {}
 
   private extractHtml(payload: string): string {
     const m = payload?.match(/^```html\s*([\s\S]*?)\s*```$/i);
@@ -53,8 +52,7 @@ export class ChatbotComponent {
 
     this.isLoading = true;
 
-    const level = this.auth.getStoredUser()?.level ?? 6;
-    this.openAiApiService.sendMessage(text, level).subscribe({
+    this.openAiApiService.sendMessage(text).subscribe({
       next: (res) => {
         const raw = res?.response ?? '';
         const html = this.extractHtml(raw);

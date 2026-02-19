@@ -22,7 +22,9 @@ DRIVER   = os.getenv("SQL_DRIVER", "ODBC Driver 18 for SQL Server")
 
 # Initialize embeddings
 # embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-embeddings = OpenAIEmbeddings(model = "text-embedding-ada-002", api_key = OPENAI_API_KEY)
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, api_key=OPENAI_API_KEY)
+
 
 # Initialize vector store (conditional on provider)
 if VECTOR_DB == "faiss":

@@ -12,16 +12,21 @@
         <th>Username</th>
         <th>Role</th>
         <th>Created</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
       <tr *ngFor="let u of users">
         <td>{{ u.id }}</td>
         <td>{{ u.username }}</td>
-        <td>{{ roleName(u.level) }}</td>
+        <td>{{ roleName(u) }}</td>
         <td>{{ u.created_at | date:'short' }}</td>
+        <td>
+          <button class="btn" (click)="deleteUser(u)" [disabled]="!canDelete(u) || deletingUserId !== null">
+            {{ deletingUserId === u.id ? 'Deleting...' : 'Delete' }}
+          </button>
+        </td>
       </tr>
     </tbody>
   </table>
 </div>
-

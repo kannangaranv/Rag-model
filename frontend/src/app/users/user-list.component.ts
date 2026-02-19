@@ -1,8 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from 'src/environments/enviornment';
+import { AuthService } from '../auth/auth.service';
 
-type UserMeta = { id: number; username: string; level: number; created_at?: string };
+type UserMeta = { id: number; username: string; role?: string; level?: number; created_at?: string };
 
 @Component({
   selector: 'app-user-list',
@@ -11,26 +12,22 @@ type UserMeta = { id: number; username: string; level: number; created_at?: stri
 })
 export class UserListComponent implements OnInit {
   loading = false;
+  deletingUserId: number | null = null;
   error: string | null = null;
   users: UserMeta[] = [];
+  meId: number | null = null;
   private api = environment.apiUrl;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private auth: AuthService) {}
 
   ngOnInit(): void {
+    this.meId = this.auth.getStoredUser()?.id ?? null;
     this.fetch();
   }
 
-  roleName(level: number): string {
-    switch (level) {
-      case 1: return 'Admin';
-      case 2: return 'Board Admin';
-      case 3: return 'Sys Admin';
-      case 4: return 'Organizer';
-      case 5: return 'Actionee';
-      case 6: return 'Invittee';
-      default: return `Unknown (${level})`;
-    }
+  roleName(u: UserMeta): string {
+    if (u.role) return u.role;
+    return u.level ? `Level ${u.level}` : '';
   }
 
   fetch() {
@@ -40,5 +37,26 @@ export class UserListComponent implements OnInit {
       error: (err) => { this.error = err?.error?.detail || 'Failed to load users'; this.loading = false; }
     });
   }
-}
 
+  canDelete(u: UserMeta): boolean {
+    return this.meId !== null && u.id !== this.meId;
+  }
+
+  deleteUser(u: UserMeta) {
+    if (!this.canDelete(u) || this.deletingUserId !== null) return;
+    if (!confirm(`Delete user "${u.username}"? This action cannot be undone.`)) return;
+
+    this.deletingUserId = u.id;
+    this.error = null;
+    this.http.delete(`${this.api}/auth/users/${u.id}`).subscribe({
+      next: () => {
+        this.deletingUserId = null;
+        this.fetch();
+      },
+      error: (err) => {
+        this.deletingUserId = null;
+        this.error = err?.error?.detail || 'Failed to delete user';
+      }
+    });
+  }
+}

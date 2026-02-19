@@ -61,12 +61,14 @@ class PaperListResponse(BaseModel):
 class UserCreate(BaseModel):
     username: str
     password: str
-    level: int = 1  # 1..6
+    role: Optional[str] = None
+    level: Optional[int] = None
 
 class UserOut(BaseModel):
     id: int
     username: str
-    level: int
+    role: str
+    level: Optional[int] = None
     can_upload: bool = False
 
 class LoginRequest(BaseModel):
@@ -80,7 +82,8 @@ class Token(BaseModel):
 class UserMeta(BaseModel):
     id: int
     username: str
-    level: int
+    role: str
+    level: Optional[int] = None
     created_at: Optional[datetime] = None
 
 class UserListResponse(BaseModel):
