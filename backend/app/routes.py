@@ -70,8 +70,8 @@ async def query_documents(level: int, payload: QueryRequest, current_user: User 
     username = current_user.Username
     effective_role = level_code_to_role(current_user.Level)
     print(f"Received query request: username={username}, level={level}, role={effective_role}, paper_id={payload.paper_id}")
-    if level < 1 or level > 6:
-        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
+    if level < 1 or level > 14:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..14")
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     paper_id = (payload.paper_id or "").strip() or None
@@ -131,8 +131,8 @@ async def query_documents(payload: QueryRequest):
 async def upload_documents(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-    if level < 1 or level > 6:
-        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
+    if level < 1 or level > 14:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..14")
     
     temp_path = None
     try:
@@ -204,8 +204,8 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
     allowed = {"video/mp4", "video/x-m4v", "video/mpeg", "video/quicktime"}
     if file.content_type not in allowed:
         raise HTTPException(400, detail=f"Unsupported content type: {file.content_type}")
-    if level < 1 or level > 6:
-        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
+    if level < 1 or level > 14:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..14")
 
     suffix = Path(file.filename or "").suffix.lower() or ".mp4"
     fd, tmp_name = tempfile.mkstemp(suffix=suffix)
@@ -275,8 +275,8 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
 async def upload_papers(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-    if level < 1 or level > 6:
-        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
+    if level < 1 or level > 14:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..14")
 
     temp_path = None
     try:

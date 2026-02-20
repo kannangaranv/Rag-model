@@ -84,11 +84,13 @@ export class OpenAiApiService {
   constructor(private http: HttpClient, private auth: AuthService) { }
 
   public sendMessage(message: string, paperId?: string | null) {
+    const user = this.auth.getStoredUser();
+    const level = user?.level ?? 2;
     const payload: any = { query: message };
     if (paperId) payload.paper_id = paperId;
-    const role = this.auth.getStoredUser()?.role;
+    const role = user?.role;
     if (role) payload.role = role;
-    return this.http.post<any>(`${this.apiUrl}/query`, payload);
+    return this.http.post<any>(`${this.apiUrl}/query/${level}`, payload);
   }
 
   public sendPaperMessage(paperId: string, message: string) {
