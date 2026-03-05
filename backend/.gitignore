@@ -17,3 +17,11 @@ htmlcov/
 # IDE
 .vscode/
 .idea/
+
+# Docker / compose runtime state
+volumes/
+data/
+db/
+logs/
+tmp/
+*.log

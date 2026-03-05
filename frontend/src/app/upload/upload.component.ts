@@ -1,11 +1,16 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpEventType } from '@angular/common/http';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import {
   OpenAiApiService,
   DocumentMeta,
   DocumentListResponse,
   VideoMeta,
-  VideoListResponse
+  VideoListResponse,
+  PaperMeta,
+  PaperListResponse,
+  UserRoleFileMeta,
+  UserRoleFileListResponse
 } from '../services/open-ai-api.service';
 
 @Component({
@@ -38,6 +43,41 @@ export class UploadComponent implements OnInit {
   totalDocs = 0;
   qDocs = '';
 
+  userRoleFile: File | null = null;
+  userRoleUploading = false;
+  userRoleProgress = 0;
+  userRoleMessage = '';
+  userRoleError = '';
+  dragOverUserRole = false;
+
+  userRoleFiles: UserRoleFileMeta[] = [];
+  userRoleLoading = false;
+  pageUserRoles = 1;
+  pageSizeUserRoles = 10;
+  totalUserRoles = 0;
+
+  paperLevel: number = 2;
+  paperFile: File | null = null;
+  paperUploading = false;
+  paperProgress = 0;
+  paperMessage = '';
+  paperError = '';
+  dragOverPaper = false;
+
+  papers: PaperMeta[] = [];
+  papersLoading = false;
+  pagePapers = 1;
+  pageSizePapers = 10;
+  totalPapers = 0;
+  qPapers = '';
+  paperPreviewName = '';
+  paperPreviewId = '';
+  paperPreviewUrl: SafeResourceUrl | null = null;
+  paperQuestion = '';
+  paperAsking = false;
+  paperAnswerHtml = '';
+  paperAnswerError = '';
+
   videoFile: File | null = null;
   videoUploading = false;
   videoProgress = 0;
@@ -52,10 +92,12 @@ export class UploadComponent implements OnInit {
   totalVideos = 0;
   qVideos = '';
 
-  constructor(private api: OpenAiApiService) {}
+  constructor(private api: OpenAiApiService, private sanitizer: DomSanitizer) {}
 
   ngOnInit(): void {
     this.loadDocuments(1);
+    this.loadUserRoles(1);
+    this.loadPapers(1);
     this.loadVideos(1);
   }
 
@@ -179,6 +221,279 @@ export class UploadComponent implements OnInit {
       error: () => {
         this.pdfUploading = false;
         alert('Failed to delete document. Please try again.');
+      }
+    });
+  }
+
+  onUserRoleFileSelected(evt: Event) {
+    const input = evt.target as HTMLInputElement;
+    const picked = input.files?.[0] || null;
+    if (picked) this.setUserRoleFile(picked);
+    if (input) input.value = '';
+  }
+
+  onUserRoleDragOver(e: DragEvent) {
+    e.preventDefault();
+    this.dragOverUserRole = true;
+  }
+
+  onUserRoleDragLeave(_: DragEvent) {
+    this.dragOverUserRole = false;
+  }
+
+  onUserRoleDrop(e: DragEvent) {
+    e.preventDefault();
+    this.dragOverUserRole = false;
+    const dropped = e.dataTransfer?.files?.[0] || null;
+    if (dropped) this.setUserRoleFile(dropped);
+  }
+
+  setUserRoleFile(f: File) {
+    this.userRoleMessage = '';
+    this.userRoleError = '';
+
+    const byType = f.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    const byExt = f.name.toLowerCase().endsWith('.xlsx');
+    if (!byType && !byExt) {
+      this.userRoleError = 'Only .xlsx files are allowed.';
+      this.userRoleFile = null;
+      return;
+    }
+
+    const MAX_MB = 50;
+    if (f.size > MAX_MB * 1024 * 1024) {
+      this.userRoleError = `File is too large. Max ${MAX_MB} MB.`;
+      this.userRoleFile = null;
+      return;
+    }
+
+    this.userRoleFile = f;
+  }
+
+  clearUserRoleFile() {
+    if (this.userRoleUploading) return;
+    this.userRoleFile = null;
+    this.userRoleMessage = '';
+    this.userRoleError = '';
+    this.userRoleProgress = 0;
+  }
+
+  uploadUserRole() {
+    if (!this.userRoleFile || this.userRoleUploading) return;
+    this.userRoleUploading = true;
+    this.userRoleProgress = 0;
+    this.userRoleMessage = '';
+    this.userRoleError = '';
+
+    this.api.uploadUserRoleWithProgress(this.userRoleFile).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.UploadProgress && event.total) {
+          this.userRoleProgress = Math.round((event.loaded / event.total) * 100);
+        } else if (event.type === HttpEventType.Response) {
+          this.userRoleUploading = false;
+          this.userRoleMessage = event.body?.message ?? 'Uploaded.';
+          this.userRoleFile = null;
+          this.loadUserRoles(1);
+        }
+      },
+      error: () => {
+        this.userRoleUploading = false;
+        this.userRoleError = 'Upload failed. Please try again.';
+      },
+    });
+  }
+
+  loadUserRoles(page: number = this.pageUserRoles) {
+    this.userRoleLoading = true;
+    this.api.getUserRoles(page, this.pageSizeUserRoles).subscribe({
+      next: (res: UserRoleFileListResponse) => {
+        this.userRoleFiles = res.items || [];
+        this.totalUserRoles = res.total || 0;
+        this.pageUserRoles = res.page || page;
+        this.pageSizeUserRoles = res.page_size || this.pageSizeUserRoles;
+        this.userRoleLoading = false;
+      },
+      error: () => {
+        this.userRoleFiles = [];
+        this.totalUserRoles = 0;
+        this.userRoleLoading = false;
+      }
+    });
+  }
+
+  prevUserRolePage() {
+    if (this.pageUserRoles > 1) this.loadUserRoles(this.pageUserRoles - 1);
+  }
+
+  nextUserRolePage() {
+    const maxPage = Math.max(1, Math.ceil(this.totalUserRoles / this.pageSizeUserRoles));
+    if (this.pageUserRoles < maxPage) this.loadUserRoles(this.pageUserRoles + 1);
+  }
+
+  deleteUserRoleFile(f: UserRoleFileMeta) {
+    if (this.userRoleUploading) return;
+    if (!confirm(`Delete user role file "${f.file_name}"? This action cannot be undone.`)) return;
+    this.userRoleUploading = true;
+    this.api.userRoleDeleteUrl(f.id).subscribe({
+      next: () => {
+        this.userRoleUploading = false;
+        this.loadUserRoles(this.pageUserRoles);
+      },
+      error: () => {
+        this.userRoleUploading = false;
+        alert('Failed to delete user role file. Please try again.');
+      }
+    });
+  }
+
+  onPaperFileSelected(evt: Event) {
+    const input = evt.target as HTMLInputElement;
+    const picked = input.files?.[0] || null;
+    if (picked) this.setPaperFile(picked);
+    if (input) input.value = '';
+  }
+
+  onPaperDragOver(e: DragEvent) {
+    e.preventDefault();
+    this.dragOverPaper = true;
+  }
+  onPaperDragLeave(_: DragEvent) {
+    this.dragOverPaper = false;
+  }
+  onPaperDrop(e: DragEvent) {
+    e.preventDefault();
+    this.dragOverPaper = false;
+    const dropped = e.dataTransfer?.files?.[0] || null;
+    if (dropped) this.setPaperFile(dropped);
+  }
+
+  setPaperFile(f: File) {
+    this.paperMessage = '';
+    this.paperError = '';
+    if (f.type !== 'application/pdf') {
+      this.paperError = 'Only PDF files are allowed.';
+      this.paperFile = null;
+      return;
+    }
+    const MAX_MB = 50;
+    if (f.size > MAX_MB * 1024 * 1024) {
+      this.paperError = `File is too large. Max ${MAX_MB} MB.`;
+      this.paperFile = null;
+      return;
+    }
+    this.paperFile = f;
+  }
+
+  clearPaperFile() {
+    if (this.paperUploading) return;
+    this.paperFile = null;
+    this.paperMessage = '';
+    this.paperError = '';
+    this.paperProgress = 0;
+  }
+
+  uploadPaper() {
+    if (!this.paperFile || this.paperUploading) return;
+    this.paperUploading = true;
+    this.paperProgress = 0;
+    this.paperMessage = '';
+    this.paperError = '';
+
+    this.api.uploadPaperWithProgress(this.paperFile, this.paperLevel).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.UploadProgress && event.total) {
+          this.paperProgress = Math.round((event.loaded / event.total) * 100);
+        } else if (event.type === HttpEventType.Response) {
+          this.paperUploading = false;
+          this.paperMessage = event.body?.message ?? 'Uploaded.';
+          this.paperFile = null;
+          this.loadPapers(1);
+        }
+      },
+      error: () => {
+        this.paperUploading = false;
+        this.paperError = 'Upload failed. Please try again.';
+      },
+    });
+  }
+
+  loadPapers(page: number = this.pagePapers) {
+    this.papersLoading = true;
+    this.api.getPapers(page, this.pageSizePapers, this.qPapers).subscribe({
+      next: (res: PaperListResponse) => {
+        this.papers = res.items || [];
+        this.totalPapers = res.total || 0;
+        this.pagePapers = res.page || page;
+        this.pageSizePapers = res.page_size || this.pageSizePapers;
+        this.papersLoading = false;
+      },
+      error: () => {
+        this.papers = [];
+        this.totalPapers = 0;
+        this.papersLoading = false;
+      }
+    });
+  }
+
+  onPaperSearchEnter() {
+    this.loadPapers(1);
+  }
+
+  prevPaperPage() {
+    if (this.pagePapers > 1) this.loadPapers(this.pagePapers - 1);
+  }
+  nextPaperPage() {
+    const maxPage = Math.max(1, Math.ceil(this.totalPapers / this.pageSizePapers));
+    if (this.pagePapers < maxPage) this.loadPapers(this.pagePapers + 1);
+  }
+
+  viewPaper(p: PaperMeta) {
+    this.paperPreviewId = p.id;
+    this.paperPreviewName = p.file_name;
+    this.paperPreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(`${this.api.paperViewUrl(p.id)}#toolbar=1`);
+    this.paperQuestion = '';
+    this.paperAnswerHtml = '';
+    this.paperAnswerError = '';
+  }
+  downloadPaper(p: PaperMeta) {
+    window.open(this.api.paperDownloadUrl(p.id), '_blank');
+  }
+
+  deletePaper(p: PaperMeta) {
+    if (!confirm(`Delete paper "${p.file_name}"? This action cannot be undone.`)) return;
+    this.api.paperDeleteUrl(p.id).subscribe({
+      next: () => {
+        this.loadPapers(this.pagePapers);
+      },
+      error: () => {
+        alert('Failed to delete paper. Please try again.');
+      }
+    });
+  }
+
+  closePaperPreview() {
+    this.paperPreviewId = '';
+    this.paperPreviewName = '';
+    this.paperPreviewUrl = null;
+    this.paperQuestion = '';
+    this.paperAnswerHtml = '';
+    this.paperAnswerError = '';
+  }
+
+  askAboutSelectedPaper() {
+    const text = (this.paperQuestion || '').trim();
+    if (!this.paperPreviewId || !text || this.paperAsking) return;
+
+    this.paperAsking = true;
+    this.paperAnswerError = '';
+    this.api.sendPaperMessage(this.paperPreviewId, text).subscribe({
+      next: (res) => {
+        this.paperAnswerHtml = res?.response || '<p>No answer received.</p>';
+        this.paperAsking = false;
+      },
+      error: () => {
+        this.paperAnswerError = 'Failed to get answer. Please try again.';
+        this.paperAsking = false;
       }
     });
   }
@@ -326,6 +641,16 @@ export class UploadComponent implements OnInit {
   get totalVideoPages(): number {
     if (!this.totalVideos || !this.pageSizeVideos) return 1;
     return Math.max(1, Math.ceil(this.totalVideos / this.pageSizeVideos));
+  }
+
+  get totalPaperPages(): number {
+    if (!this.totalPapers || !this.pageSizePapers) return 1;
+    return Math.max(1, Math.ceil(this.totalPapers / this.pageSizePapers));
+  }
+
+  get totalUserRolePages(): number {
+    if (!this.totalUserRoles || !this.pageSizeUserRoles) return 1;
+    return Math.max(1, Math.ceil(this.totalUserRoles / this.pageSizeUserRoles));
   }
 
   roleName(level?: number): string {

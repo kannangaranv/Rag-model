@@ -1,5 +1,5 @@
 
-from sqlalchemy import Column, DateTime, Integer, LargeBinary, NVARCHAR
+from sqlalchemy import Column, DateTime, Integer, LargeBinary, NVARCHAR, UniqueConstraint
 from sqlalchemy.dialects.mssql import UNIQUEIDENTIFIER
 from sqlalchemy.sql import func
 from sqlalchemy import  Column, Integer, String, Text, ForeignKey
@@ -26,6 +26,17 @@ class Video(Base):
     FileSizeBytes = Column(Integer,         nullable=False)
     Content       = Column(LargeBinary,     nullable=False)
     Transcript    = Column(NVARCHAR(None))  
+    Level         = Column(Integer,         nullable=True)
+    UploadedAt    = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
+
+class Paper(Base):
+    __tablename__ = "Papers"
+    Id            = Column(UNIQUEIDENTIFIER, primary_key=True)
+    FileName      = Column(NVARCHAR(255),   nullable=False)
+    ContentType   = Column(NVARCHAR(100),   nullable=False)
+    FileSizeBytes = Column(Integer,         nullable=False)
+    Content       = Column(LargeBinary,     nullable=False)
+    MdText        = Column(NVARCHAR(None))
     Level         = Column(Integer,         nullable=True)
     UploadedAt    = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
 
@@ -59,3 +70,21 @@ class UserRoleFile(Base):
     FileSizeBytes = Column(Integer, nullable=False)
     Content = Column(LargeBinary, nullable=False)
     UploadedAt = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
+
+class KnowledgeProfile(Base):
+    __tablename__ = "KnowledgeProfiles"
+    __table_args__ = (
+        UniqueConstraint("DocId", "SourceType", name="UQ_KnowledgeProfiles_DocId_SourceType"),
+    )
+
+    Id = Column(Integer, primary_key=True, autoincrement=True)
+    DocId = Column(UNIQUEIDENTIFIER, nullable=False, index=True)
+    SourceType = Column(NVARCHAR(20), nullable=False, index=True)  # manual | paper
+    FileName = Column(NVARCHAR(255), nullable=True)
+    ProfileText = Column(NVARCHAR(None), nullable=False)
+    CreatedAt = Column(DateTime(timezone=False), server_default=func.sysutcdatetime())
+    UpdatedAt = Column(
+        DateTime(timezone=False),
+        server_default=func.sysutcdatetime(),
+        onupdate=func.sysutcdatetime(),
+    )

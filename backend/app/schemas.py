@@ -5,6 +5,8 @@ from uuid import UUID
 
 class QueryRequest(BaseModel):
     query: str
+    paper_id: Optional[str] = None
+    role: Optional[str] = None
 
 class QueryResponse(BaseModel):
     response: str
@@ -42,15 +44,45 @@ class VideoListResponse(BaseModel):
     page: int
     page_size: int
 
+class PaperMeta(BaseModel):
+    id: UUID
+    file_name: str
+    content_type: str
+    file_size_bytes: int
+    uploaded_at: datetime
+    has_md_text: bool
+    level: Optional[int] = None
+
+class PaperListResponse(BaseModel):
+    items: List[PaperMeta]
+    total: int
+    page: int
+    page_size: int
+
+class UserRoleFileMeta(BaseModel):
+    id: UUID
+    file_name: str
+    content_type: str
+    file_size_bytes: int
+    uploaded_at: datetime
+
+class UserRoleFileListResponse(BaseModel):
+    items: List[UserRoleFileMeta]
+    total: int
+    page: int
+    page_size: int
+
 class UserCreate(BaseModel):
     username: str
     password: str
-    level: int = 1  # 1..6
+    role: Optional[str] = None
+    level: Optional[int] = None
 
 class UserOut(BaseModel):
     id: int
     username: str
-    level: int
+    role: str
+    level: Optional[int] = None
     can_upload: bool = False
 
 class LoginRequest(BaseModel):
@@ -64,7 +96,8 @@ class Token(BaseModel):
 class UserMeta(BaseModel):
     id: int
     username: str
-    level: int
+    role: str
+    level: Optional[int] = None
     created_at: Optional[datetime] = None
 
 class UserListResponse(BaseModel):

@@ -8,7 +8,6 @@ import { FormsModule } from '@angular/forms';
 import { UploadComponent } from './upload/upload.component';
 import { LayoutComponent } from './layout/layout.component';
 import { RouterModule, Routes } from '@angular/router';
-import { ChatWidgetComponent } from './chat-widget/chat-widget.component';
 import { ChatWidgetModule } from './chat-widget/chat-widget.module';
 import { AuthGuard } from './auth/auth.guard';
 import { AdminGuard } from './auth/admin.guard';
@@ -18,6 +17,7 @@ import { LoginComponent } from './login/login.component';
 import { UserCreateComponent } from './users/user-create.component';
 import { UserListComponent } from './users/user-list.component';
 import { UploadGuard } from './auth/upload.guard';
+import { PapersComponent } from './papers/papers.component';
 const routes: Routes = [
   {
     path: '',
@@ -26,6 +26,7 @@ const routes: Routes = [
     children: [
       { path: 'chat', component: ChatbotComponent, title: 'AI Assistant', canActivate: [NotAdminGuard] },
       { path: 'knowledge-base', component: UploadComponent, title: 'Knowledge Base', canActivate: [UploadGuard] },
+      { path: 'papers', component: PapersComponent, title: 'Papers' },
       { path: 'users', component: UserListComponent, title: 'Users', canActivate: [AdminGuard] },
       { path: 'users/create', component: UserCreateComponent, title: 'Create User', canActivate: [AdminGuard] },
       { path: '', redirectTo: 'chat', pathMatch: 'full' },
@@ -43,7 +44,8 @@ const routes: Routes = [
     LayoutComponent,
     LoginComponent,
     UserCreateComponent,
-    UserListComponent
+    UserListComponent,
+    PapersComponent
   ],
   imports: [
     RouterModule.forRoot(routes),

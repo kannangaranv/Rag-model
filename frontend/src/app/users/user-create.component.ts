@@ -10,7 +10,23 @@ import { environment } from 'src/environments/enviornment';
 export class UserCreateComponent {
   username = '';
   password = '';
-  level = 6;
+  role = 'Member';
+  roles: string[] = [
+    'Super Admin',
+    'Actionee',
+    'Admin Assistant- Access given to assigned subcategory data only',
+    'Board Administrator',
+    'Guest',
+    'Invitee',
+    'Member',
+    'Member - Comment',
+    'Member - View',
+    'Secretary',
+    'Secretary- Assistant',
+    'Secretary- Confirm',
+    'Secretary- Upload',
+    'System Administrator',
+  ];
   saving = false;
   message: string | null = null;
   error: string | null = null;
@@ -28,13 +44,13 @@ export class UserCreateComponent {
     this.http.post(`${this.api}/auth/register`, {
       username: this.username,
       password: this.password,
-      level: Number(this.level)
+      role: this.role
     }).subscribe({
       next: () => {
         this.saving = false;
         this.username = '';
         this.password = '';
-        this.level = 6;
+        this.role = 'Member';
         this.message = 'User created successfully';
       },
       error: (err) => {

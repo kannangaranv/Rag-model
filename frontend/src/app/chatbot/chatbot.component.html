@@ -48,12 +48,14 @@
       rows="1"
       placeholder="Type a message…"
       (keydown.enter)="onEnter($event)"
+      (keydown.enter)="userMessage = ''"
     ></textarea>
 
     <button
       class="send-btn"
       (click)="sendMessage()"
       [disabled]="isLoading || !userMessage.trim()"
+      (click)="userMessage = ''"
     >
       Send
     </button>

@@ -15,8 +15,12 @@ from app.config import SessionLocal
 from app.schemas import (
     DocumentMeta,
     DocumentListResponse,
+    PaperMeta,
+    PaperListResponse,
     QueryRequest,
     QueryResponse,
+    UserRoleFileListResponse,
+    UserRoleFileMeta,
     VideoListResponse,
     VideoMeta,
     UploadDocumentResponse,
@@ -34,8 +38,19 @@ from app.utils import (
     create_documents_from_chunks,
     create_documents_from_vector_sentences,
     upload_documents_to_vector_store,
-    invoke_and_save,
-    delete_documents_from_vector_store
+    upload_user_roles_to_vector_store,
+    upload_papers_to_vector_store,
+    invoke_auto_route_and_save,
+    delete_documents_from_vector_store,
+    delete_papers_from_vector_store,
+    upload_manual_profile_to_vector_store,
+    upload_paper_profile_to_vector_store,
+    delete_manual_profile_from_vector_store,
+    delete_paper_profile_from_vector_store,
+    MANUAL_CHUNK_SIZE,
+    MANUAL_CHUNK_OVERLAP,
+    PAPER_CHUNK_SIZE,
+    PAPER_CHUNK_OVERLAP,
 )
 from app.video_utils import get_transcription_from_video
 from app.file_utils import _parse_range_header
@@ -44,31 +59,80 @@ from starlette import status
 from sqlalchemy.exc import SQLAlchemyError
 from app.security import get_current_user, require_upload_permission
 from app.models import User
+from app.db_utils import upsert_knowledge_profile, delete_knowledge_profile
+from app.user_roles import level_code_to_role
 
-# neglest 
 router = APIRouter()
 
-# API to query documents and get responses from llm.
+# API to query documents
 @router.post("/query/{level}", response_model=QueryResponse, status_code=status.HTTP_200_OK)
 async def query_documents(level: int, payload: QueryRequest, current_user: User = Depends(get_current_user)):
     username = current_user.Username
-    if level < 1 or level > 6:
-        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
+    effective_role = level_code_to_role(current_user.Level)
+    print(f"Received query request: username={username}, level={level}, role={effective_role}, paper_id={payload.paper_id}")
+    if level < 1 or level > 14:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..14")
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    paper_id = (payload.paper_id or "").strip() or None
+    if paper_id:
+        with SessionLocal() as db:
+            exists = db.execute(
+                text("SELECT 1 FROM dbo.Papers WHERE Id = CONVERT(uniqueidentifier, :id)"),
+                {"id": paper_id},
+            ).scalar()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Paper not found")
     try:
-        response = invoke_and_save(username, payload.query, level)
+        response = invoke_auto_route_and_save(
+            username,
+            payload.query,
+            level,
+            paper_id=paper_id,
+            role=effective_role,
+        )
         return QueryResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Upload pdf to vector store and sql server
+@router.post("/query", response_model=QueryResponse, status_code=status.HTTP_200_OK)
+async def query_documents(payload: QueryRequest):
+    username = "secretary"
+
+    if not payload.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
+    paper_id = (payload.paper_id or "").strip() or None
+    print(f"Received query request: username={username}, role={payload.role}, paper_id={paper_id}")
+    if paper_id:
+        with SessionLocal() as db:
+            exists = db.execute(
+                text("SELECT 1 FROM dbo.Papers WHERE Id = CONVERT(uniqueidentifier, :id)"),
+                {"id": paper_id},
+            ).scalar()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+    try:
+        response = invoke_auto_route_and_save(
+            username,
+            payload.query,
+            level=None,
+            paper_id=paper_id,
+            role=(payload.role or "").strip() or None,
+        )
+        return QueryResponse(response=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Upload document to vector store and sql server
 @router.post("/upload-documents/{level}", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_documents(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-    if level < 1 or level > 6:
-        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
+    if level < 1 or level > 14:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..14")
     
     temp_path = None
     try:
@@ -103,9 +167,24 @@ async def upload_documents(level: int, file: UploadFile = File(...), _: str = De
                 }
             )
             db.commit()
-        chunks = create_chunks_from_text(md_text)
+        chunks = create_chunks_from_text(
+            md_text,
+            chunk_size=MANUAL_CHUNK_SIZE,
+            overlap=MANUAL_CHUNK_OVERLAP,
+        )
         documents, uuids = create_documents_from_chunks(chunks, doc_id, level)
         upload_documents_to_vector_store(documents, uuids)
+        profile_text = upload_manual_profile_to_vector_store(
+            doc_id=doc_id,
+            content=md_text,
+            file_name=file.filename,
+        )
+        upsert_knowledge_profile(
+            doc_id=doc_id,
+            source_type="manual",
+            file_name=file.filename or "document.pdf",
+            profile_text=profile_text,
+        )
 
         return UploadDocumentResponse(
             message="Document uploaded to vector store.",
@@ -125,8 +204,8 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
     allowed = {"video/mp4", "video/x-m4v", "video/mpeg", "video/quicktime"}
     if file.content_type not in allowed:
         raise HTTPException(400, detail=f"Unsupported content type: {file.content_type}")
-    if level < 1 or level > 6:
-        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..6")
+    if level < 1 or level > 14:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..14")
 
     suffix = Path(file.filename or "").suffix.lower() or ".mp4"
     fd, tmp_name = tempfile.mkstemp(suffix=suffix)
@@ -168,9 +247,18 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
             )
             db.commit()
 
-        chunks = create_chunks_from_text(transcription)
+        chunks = create_chunks_from_text(
+            transcription,
+            chunk_size=MANUAL_CHUNK_SIZE,
+            overlap=MANUAL_CHUNK_OVERLAP,
+        )
         documents, uuids = create_documents_from_chunks(chunks, video_id, level)
         upload_documents_to_vector_store(documents, uuids)
+        upload_manual_profile_to_vector_store(
+            doc_id=video_id,
+            content=transcription,
+            file_name=file.filename,
+        )
 
         return UploadDocumentResponse(
             message="Video uploaded to vector store.",
@@ -182,6 +270,107 @@ async def upload_videos(level: int, file: UploadFile = File(...), _: str = Depen
         if temp_path:
             temp_path.unlink(missing_ok=True)
 
+# Upload paper to dedicated vector store and sql server
+@router.post("/upload-papers/{level}", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
+async def upload_papers(level: int, file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
+    if file.content_type not in ("application/pdf", "application/x-pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+    if level < 1 or level > 14:
+        raise HTTPException(status_code=422, detail="Invalid user level. Must be 1..14")
+
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            temp_path = Path(tmp.name)
+            shutil.copyfileobj(file.file, tmp)
+    finally:
+        await file.close()
+
+    try:
+        md_text = convert_pdf_to_markdown(temp_path)
+        pdf_bytes = temp_path.read_bytes()
+        file_size = temp_path.stat().st_size
+        paper_id = str(uuid4())
+
+        with SessionLocal() as db:
+            db.execute(
+                text("""
+                    INSERT INTO dbo.Papers
+                        (Id, FileName, ContentType, FileSizeBytes, Content, MdText, Level)
+                    VALUES
+                        (CONVERT(uniqueidentifier, :Id),
+                         :FileName, :ContentType, :FileSizeBytes, :Content, :MdText, :Level)
+                """),
+                {
+                    "Id": paper_id,
+                    "FileName": file.filename or "paper.pdf",
+                    "ContentType": file.content_type,
+                    "FileSizeBytes": file_size,
+                    "Content": pdf_bytes,
+                    "MdText": md_text,
+                    "Level": level,
+                }
+            )
+            db.commit()
+
+        chunks = create_chunks_from_text(
+            md_text,
+            chunk_size=PAPER_CHUNK_SIZE,
+            overlap=PAPER_CHUNK_OVERLAP,
+        )
+        documents, uuids = create_documents_from_chunks(chunks, paper_id, level)
+        upload_papers_to_vector_store(documents, uuids)
+        profile_text = upload_paper_profile_to_vector_store(
+            doc_id=paper_id,
+            content=md_text,
+            file_name=file.filename,
+        )
+        upsert_knowledge_profile(
+            doc_id=paper_id,
+            source_type="paper",
+            file_name=file.filename or "paper.pdf",
+            profile_text=profile_text,
+        )
+
+        return UploadDocumentResponse(
+            message="Paper uploaded to dedicated vector store.",
+            document_id=paper_id
+        )
+    except Exception as e:
+        print(f"Error uploading paper: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+    finally:
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
+
+# @router.post("/papers/{paper_id}/query", response_model=QueryResponse, status_code=status.HTTP_200_OK)
+# def query_selected_paper(
+#     paper_id: UUID,
+#     payload: QueryRequest,
+#     current_user: User = Depends(get_current_user),
+# ):
+#     if not payload.query.strip():
+#         raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
+#     with SessionLocal() as db:
+#         exists = db.execute(
+#             text("SELECT 1 FROM dbo.Papers WHERE Id = CONVERT(uniqueidentifier, :id)"),
+#             {"id": str(paper_id)},
+#         ).scalar()
+#     if not exists:
+#         raise HTTPException(status_code=404, detail="Paper not found")
+
+#     try:
+#         response = invoke_paper_query_and_save(
+#             session_id=current_user.Username,
+#             input_text=payload.query,
+#             paper_id=str(paper_id),
+#         )
+#         return QueryResponse(response=response)
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+# API to upload user roles from Excel file
 @router.post("/upload-user-roles", response_model=UploadDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_user_roles(file: UploadFile = File(...), _: str = Depends(require_upload_permission())):
     if file.content_type not in ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",):
@@ -221,7 +410,7 @@ async def upload_user_roles(file: UploadFile = File(...), _: str = Depends(requi
             db.commit()
 
         documents, uuids = create_documents_from_vector_sentences(records)
-        upload_documents_to_vector_store(documents, uuids)
+        upload_user_roles_to_vector_store(documents, uuids)
 
         return UploadDocumentResponse(
             message="User roles uploaded to vector store.",
@@ -357,6 +546,7 @@ def view_document(doc_id: UUID, request: Request):
     }
     return Response(content=blob, media_type=content_type, headers=headers)
 
+# API to delete documents
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(doc_id: str, _: str = Depends(require_upload_permission())):
     doc_id = (doc_id or "").strip()
@@ -380,6 +570,8 @@ def delete_document(doc_id: str, _: str = Depends(require_upload_permission())):
     try:
         print("Deleting document from vector store:", doc_id)
         delete_documents_from_vector_store(doc_id)
+        delete_manual_profile_from_vector_store(doc_id)
+        delete_knowledge_profile(doc_id=doc_id, source_type="manual")
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from vector store")
 
@@ -396,6 +588,160 @@ def delete_document(doc_id: str, _: str = Depends(require_upload_permission())):
 
         if getattr(result, "rowcount", 0) == 0:
             raise HTTPException(status_code=404, detail="Document not found")
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+# API to list papers
+@router.get("/papers", response_model=PaperListResponse, status_code=status.HTTP_200_OK)
+def list_papers(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    _: User = Depends(get_current_user)
+):
+    offset = (page - 1) * page_size
+    with SessionLocal() as db:
+        total = db.execute(text("SELECT COUNT(*) AS cnt FROM dbo.Papers")).scalar_one()
+
+        rows = db.execute(
+            text("""
+                SELECT
+                    Id,
+                    FileName,
+                    ContentType,
+                    FileSizeBytes,
+                    UploadedAt,
+                    CASE WHEN MdText IS NULL THEN 0 ELSE 1 END AS HasMd,
+                    Level
+                FROM dbo.Papers
+                ORDER BY UploadedAt DESC
+                OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+            """),
+            {"offset": offset, "limit": page_size}
+        ).all()
+
+    items = [
+        PaperMeta(
+            id=row.Id,
+            file_name=row.FileName,
+            content_type=row.ContentType,
+            file_size_bytes=row.FileSizeBytes,
+            uploaded_at=row.UploadedAt,
+            has_md_text=bool(row.HasMd),
+            level=getattr(row, "Level", None),
+        )
+        for row in rows
+    ]
+    return PaperListResponse(items=items, total=total, page=page, page_size=page_size)
+
+# API to download papers
+@router.get("/papers/{paper_id}/download", status_code=status.HTTP_200_OK)
+def download_paper(paper_id: UUID):
+    with SessionLocal() as db:
+        row = db.execute(
+            text("""
+                SELECT FileName, ContentType, Content
+                FROM dbo.Papers
+                WHERE Id = CONVERT(uniqueidentifier, :id)
+            """),
+            {"id": str(paper_id)}
+        ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    file_like = BytesIO(row.Content)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{row.FileName}"'
+    }
+    return StreamingResponse(
+        file_like,
+        media_type=row.ContentType or "application/pdf",
+        headers=headers
+    )
+
+# API to view papers
+@router.get("/papers/{paper_id}/view", status_code=status.HTTP_200_OK)
+def view_paper(paper_id: UUID, request: Request):
+    with SessionLocal() as db:
+        row = db.execute(
+            text("""
+                SELECT FileName, ContentType, Content
+                FROM dbo.Papers
+                WHERE Id = CONVERT(uniqueidentifier, :id)
+            """),
+            {"id": str(paper_id)}
+        ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    content_type = row.ContentType or "application/pdf"
+    file_name = row.FileName or "paper.pdf"
+    blob: bytes = row.Content
+    total = len(blob)
+
+    range_header = request.headers.get("range")
+    if range_header:
+        rng = _parse_range_header(range_header, total)
+        if rng:
+            start, end = rng
+            chunk = blob[start:end + 1]
+            headers = {
+                "Content-Range": f"bytes {start}-{end}/{total}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(len(chunk)),
+                "Content-Disposition": f'inline; filename="{file_name}"',
+            }
+            return Response(content=chunk, status_code=206, media_type=content_type, headers=headers)
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(total),
+        "Content-Disposition": f'inline; filename="{file_name}"',
+    }
+    return Response(content=blob, media_type=content_type, headers=headers)
+
+@router.delete("/papers/{paper_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_paper(paper_id: str, _: str = Depends(require_upload_permission())):
+    paper_id = (paper_id or "").strip()
+    try:
+        uid = UUID(paper_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid paper id")
+
+    with SessionLocal() as db:
+        try:
+            exists = db.execute(
+                text("SELECT 1 FROM dbo.Papers WHERE Id = :id"),
+                {"id": str(uid)},
+            ).scalar()
+        except SQLAlchemyError:
+            raise HTTPException(status_code=500, detail="Database error while checking paper")
+
+        if not exists:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+    try:
+        print("Deleting paper from dedicated vector store:", paper_id)
+        delete_papers_from_vector_store(paper_id)
+        delete_paper_profile_from_vector_store(paper_id)
+        delete_knowledge_profile(doc_id=paper_id, source_type="paper")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete from paper vector store")
+
+    with SessionLocal() as db:
+        try:
+            result = db.execute(
+                text("DELETE FROM dbo.Papers WHERE Id = :id"),
+                {"id": str(uid)},
+            )
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Database error while deleting paper")
+
+        if getattr(result, "rowcount", 0) == 0:
+            raise HTTPException(status_code=404, detail="Paper not found")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -522,6 +868,7 @@ def view_video(video_id: UUID, request: Request):
     }
     return Response(content=blob, media_type=content_type, headers=headers)
 
+# API to delete videos
 @router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
     video_id = (video_id or "").strip()
@@ -545,6 +892,7 @@ def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
     try:
        print("Deleting video from vector store:", video_id)
        delete_documents_from_vector_store(video_id)
+       delete_manual_profile_from_vector_store(video_id)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from vector store")
 
@@ -563,6 +911,45 @@ def delete_video(video_id: str, _: str = Depends(require_upload_permission())):
             raise HTTPException(status_code=404, detail="Video not found")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+# API to delete user role files
+@router.get("/user-roles", response_model=UserRoleFileListResponse, status_code=status.HTTP_200_OK)
+def list_user_role_files(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    _: str = Depends(require_upload_permission()),
+):
+    offset = (page - 1) * page_size
+    with SessionLocal() as db:
+        total = db.execute(text("SELECT COUNT(*) AS cnt FROM dbo.UserRoleFiles")).scalar_one()
+
+        rows = db.execute(
+            text("""
+                SELECT
+                    Id,
+                    FileName,
+                    ContentType,
+                    FileSizeBytes,
+                    UploadedAt
+                FROM dbo.UserRoleFiles
+                ORDER BY UploadedAt DESC
+                OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+            """),
+            {"offset": offset, "limit": page_size}
+        ).all()
+
+    items = [
+        UserRoleFileMeta(
+            id=row.Id,
+            file_name=row.FileName,
+            content_type=row.ContentType,
+            file_size_bytes=row.FileSizeBytes,
+            uploaded_at=row.UploadedAt,
+        )
+        for row in rows
+    ]
+
+    return UserRoleFileListResponse(items=items, total=total, page=page, page_size=page_size)
 
 @router.delete("/user-roles/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user_role_file(file_id: str, _: str = Depends(require_upload_permission())):
@@ -587,6 +974,7 @@ def delete_user_role_file(file_id: str, _: str = Depends(require_upload_permissi
     try:
        print("Deleting user role file from vector store:", file_id)
        delete_documents_from_vector_store(file_id)
+       delete_manual_profile_from_vector_store(file_id)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete from vector store")
 

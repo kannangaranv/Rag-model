@@ -1,6 +1,7 @@
-import { Component, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, ViewChild } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ChatWidgetService, ChatMessage } from './chat-widget.service';
+import { PaperContextService } from '../services/paper-context.service';
 
 @Component({
   selector: 'app-chat-widget',
@@ -12,12 +13,13 @@ export class ChatWidgetComponent implements AfterViewInit {
   input = '';
   loading = false;
   messages: ChatMessage[] = [];
+  activePaper$ = this.paperContext.activePaper$();
 
   @ViewChild('messagesRef') messagesRef?: ElementRef<HTMLDivElement>;
   @ViewChild('inputRef') inputRef?: ElementRef<HTMLTextAreaElement>;
 
-  constructor(private api: ChatWidgetService) {
-    this.append('assistant', 'Hi! I’m your assistant. How can I help today?');
+  constructor(private api: ChatWidgetService, private paperContext: PaperContextService) {
+    this.append('assistant', "Hi! I'm your assistant. How can I help today?");
   }
 
   ngAfterViewInit(): void {}
@@ -29,7 +31,7 @@ export class ChatWidgetComponent implements AfterViewInit {
 
   restart(): void {
     this.messages = [];
-    this.append('assistant', 'Chat reset. Ask me anything about our site.');
+    this.append('assistant', 'Chat reset.');
     this.input = '';
     setTimeout(() => this.scrollToBottom(), 0);
   }
@@ -52,7 +54,7 @@ export class ChatWidgetComponent implements AfterViewInit {
       this.append('assistant', res.response);
     } catch (err) {
       console.error(err);
-      this.append('assistant', '⚠️ Sorry, something went wrong. Please try again.');
+      this.append('assistant', 'Sorry, something went wrong. Please try again.');
     } finally {
       this.loading = false;
     }

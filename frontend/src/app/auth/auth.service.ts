@@ -12,6 +12,7 @@ export interface TokenResponse {
 export interface AuthUser {
   id: number;
   username: string;
+  role: string;
   level: number;
   can_upload?: boolean;
 }
